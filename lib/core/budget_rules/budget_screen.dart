@@ -5,6 +5,7 @@ import 'category_allocations_store.dart';
 import 'category_goals_store.dart';
 import '../../help/help_screen.dart';
 import '../../help/help_topic.dart';
+import '../../theme/app_colors.dart';
 
 class BudgetScreen extends StatefulWidget {
   final String monthKey;
@@ -166,10 +167,10 @@ class _BudgetScreenState extends State<BudgetScreen> {
             width: double.infinity,
             padding: const EdgeInsets.all(16),
             color: readyToAssign < 0
-                ? Colors.red.withValues(alpha: 0.1)
+                ? context.appColors.negative.withValues(alpha: 0.1)
                 : readyToAssign == 0
-                    ? Colors.green.withValues(alpha: 0.1)
-                    : Colors.orange.withValues(alpha: 0.1),
+                    ? context.appColors.positive.withValues(alpha: 0.1)
+                    : context.appColors.warning.withValues(alpha: 0.1),
             child: Column(
               children: [
                 const Text('Reste à allouer'),
@@ -180,10 +181,10 @@ class _BudgetScreenState extends State<BudgetScreen> {
                     fontSize: 24,
                     fontWeight: FontWeight.bold,
                     color: readyToAssign < 0
-                        ? Colors.red
+                        ? context.appColors.negative
                         : readyToAssign == 0
-                            ? Colors.green
-                            : Colors.orange,
+                            ? context.appColors.positive
+                            : context.appColors.warning,
                   ),
                 ),
                 TextButton(
@@ -242,8 +243,10 @@ class _BudgetScreenState extends State<BudgetScreen> {
                                 child: LinearProgressIndicator(
                                   value: (remaining / goal).clamp(0, 1).toDouble(),
                                   minHeight: 6,
-                                  backgroundColor: Colors.grey.shade300,
-                                  color: Colors.blue,
+                                  backgroundColor: Theme.of(context)
+                                      .colorScheme
+                                      .surfaceContainerHighest,
+                                  color: Theme.of(context).colorScheme.primary,
                                 ),
                               ),
                               const SizedBox(height: 2),
@@ -262,15 +265,18 @@ class _BudgetScreenState extends State<BudgetScreen> {
                               '${remaining.toStringAsFixed(2)} €',
                               style: TextStyle(
                                 fontWeight: FontWeight.bold,
-                                color:
-                                    remaining < 0 ? Colors.red : Colors.green,
+                                color: remaining < 0
+                                    ? context.appColors.negative
+                                    : context.appColors.positive,
                               ),
                             ),
                             IconButton(
                               icon: Icon(
                                 goal != null ? Icons.flag : Icons.flag_outlined,
                                 size: 20,
-                                color: goal != null ? Colors.blue : null,
+                                color: goal != null
+                                    ? Theme.of(context).colorScheme.primary
+                                    : null,
                               ),
                               tooltip: 'Objectif d\'épargne',
                               onPressed: () => _editGoal(category),

@@ -6,6 +6,10 @@ import '../../core/archives/archives_store.dart';
 import '../../core/archives/archived_month.dart';
 import '../../core/finance/categories_store.dart';
 import '../../core/finance/transaction.dart';
+import '../../theme/app_colors.dart';
+import '../../help/help_screen.dart';
+import '../../help/help_topic.dart';
+import '../../shared/category_pie_chart.dart';
 
 class GlobalHistoryLineChartScreen extends StatefulWidget {
   const GlobalHistoryLineChartScreen({super.key});
@@ -23,7 +27,7 @@ class _GlobalHistoryLineChartScreenState
 
   // Donut
   bool donutAsPercentage = false;
-  String? focusedCategoryId;
+  PieChartMode pieMode = PieChartMode.expenses;
 
   // Courbe
   bool showTotalExpenses = true;
@@ -42,19 +46,6 @@ class _GlobalHistoryLineChartScreenState
     if (id == null) return Colors.grey;
     final c = CategoriesStore.getById(id);
     return c == null ? Colors.grey : Color(c.colorValue);
-  }
-
-  Color _shade(Color base, double t) {
-    final hsl = HSLColor.fromColor(base);
-    return hsl
-        .withLightness((hsl.lightness - (0.45 * t)).clamp(0.18, 0.85))
-        .toColor();
-  }
-
-  Color _shadeFromAmount(Color base, double amount, double min, double max) {
-    if (max <= min) return _shade(base, 0.85);
-    final n = (amount - min) / (max - min);
-    return _shade(base, (0.2 + 0.8 * n).clamp(0, 1));
   }
 
   // ─────────────────────────
@@ -85,7 +76,10 @@ class _GlobalHistoryLineChartScreenState
   Widget build(BuildContext context) {
     if (_months.isEmpty) {
       return Scaffold(
-        appBar: AppBar(title: const Text('Historique global')),
+        appBar: AppBar(
+          title: const Text('Historique global'),
+          actions: [_helpAction()],
+        ),
         body: const Center(child: Text('Aucune archive disponible')),
       );
     }
@@ -115,6 +109,7 @@ class _GlobalHistoryLineChartScreenState
               onPressed: () =>
                   setState(() => donutAsPercentage = !donutAsPercentage),
             ),
+          _helpAction(),
         ],
       ),
       body: ListView(
@@ -132,11 +127,38 @@ class _GlobalHistoryLineChartScreenState
             ),
           if (showLineChart) _globalLineChart(),
           if (showLineChart && showDonut) const SizedBox(height: 24),
-          if (showDonut) _sunDonutGlobal(),
+          if (showDonut) ...[
+            PieChartModeSelector(
+              value: pieMode,
+              onChanged: (m) => setState(() => pieMode = m),
+            ),
+            const SizedBox(height: 12),
+            CategoryPieChart(
+              transactions: _allTransactions.where((t) => _allowed(t.category)).toList(),
+              mode: pieMode,
+              asPercentage: donutAsPercentage,
+              currencySymbol: _currencySymbol,
+            ),
+          ],
           const SizedBox(height: 24),
           _categoriesAccordion(),
         ],
       ),
+    );
+  }
+
+  Widget _helpAction() {
+    return IconButton(
+      tooltip: 'Aide',
+      icon: const Icon(Icons.help_outline),
+      onPressed: () {
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (_) => const HelpScreen(topic: HelpTopic.globalHistory),
+          ),
+        );
+      },
     );
   }
 
@@ -323,112 +345,6 @@ class _GlobalHistoryLineChartScreenState
   }
 
   // ─────────────────────────
-  // 🌞 SUN DONUT GLOBAL
-  Widget _sunDonutGlobal() {
-    final expenses = _allTransactions
-        .where((t) => t.type == TransactionType.expense && _allowed(t.category))
-        .toList();
-
-    if (expenses.isEmpty) {
-      return _card(
-        'Dépenses',
-        const Center(child: Text('Aucune dépense')),
-        220,
-      );
-    }
-
-    final Map<String?, double> totals = {};
-    for (final t in expenses) {
-      totals[t.category] = (totals[t.category] ?? 0) + t.amount;
-    }
-
-    final totalSum = totals.values.fold(0.0, (a, b) => a + b);
-    final cats = totals.entries.toList()
-      ..sort((a, b) => b.value.compareTo(a.value));
-
-    final details = focusedCategoryId == null
-        ? <Transaction>[]
-        : expenses.where((t) => t.category == focusedCategoryId).toList();
-
-    final detailsSum = details.fold(0.0, (a, b) => a + b.amount);
-
-    double min = 0, max = 0;
-    if (details.isNotEmpty) {
-      details.sort((a, b) => a.amount.compareTo(b.amount));
-      min = details.first.amount;
-      max = details.last.amount;
-    }
-
-    return _card(
-      focusedCategoryId == null
-          ? 'Répartition des dépenses'
-          : _categoryName(focusedCategoryId),
-      SizedBox(
-        height: 300,
-        child: Stack(
-          alignment: Alignment.center,
-          children: [
-            if (focusedCategoryId != null && details.isNotEmpty)
-              PieChart(
-                PieChartData(
-                  centerSpaceRadius: 85,
-                  sections: details.map((t) {
-                    final ratio = t.amount / detailsSum;
-                    return PieChartSectionData(
-                      value: t.amount,
-                      radius: 78,
-                      color: _shadeFromAmount(
-                        _baseCategoryColor(focusedCategoryId),
-                        t.amount,
-                        min,
-                        max,
-                      ),
-                      title: donutAsPercentage
-                          ? '${(ratio * 100).toStringAsFixed(1)}%'
-                          : '${t.amount.toStringAsFixed(0)}$_currencySymbol',
-                      titleStyle: const TextStyle(
-                          color: Colors.white, fontSize: 9),
-                    );
-                  }).toList(),
-                ),
-              ),
-            PieChart(
-              PieChartData(
-                centerSpaceRadius: 40,
-                pieTouchData: PieTouchData(
-                  touchCallback: (e, r) {
-                    if (e is FlTapUpEvent &&
-                        r?.touchedSection != null) {
-                      setState(() {
-                        focusedCategoryId =
-                            cats[r!.touchedSection!.touchedSectionIndex].key;
-                      });
-                    }
-                  },
-                ),
-                sections: cats.map((e) {
-                  final ratio = e.value / totalSum;
-                  return PieChartSectionData(
-                    value: e.value,
-                    radius: 70,
-                    color: _shade(_baseCategoryColor(e.key), 0.85),
-                    title: donutAsPercentage
-                        ? '${(ratio * 100).toStringAsFixed(1)}%'
-                        : '${e.value.toStringAsFixed(0)}$_currencySymbol',
-                    titleStyle: const TextStyle(
-                        color: Colors.white, fontSize: 11),
-                  );
-                }).toList(),
-              ),
-            ),
-          ],
-        ),
-      ),
-      440,
-    );
-  }
-
-  // ─────────────────────────
   // ACCORDÉON
   Widget _categoriesAccordion() {
     final Map<String?, List<Transaction>> grouped = {};
@@ -463,7 +379,7 @@ class _GlobalHistoryLineChartScreenState
       trailing: Text(
         '${isIncome ? '+' : '-'}${t.amount.toStringAsFixed(2)}$_currencySymbol',
         style: TextStyle(
-          color: isIncome ? Colors.green : Colors.red,
+          color: isIncome ? context.appColors.positive : context.appColors.negative,
           fontWeight: FontWeight.bold,
         ),
       ),
@@ -494,6 +410,7 @@ class _GlobalHistoryLineChartScreenState
     required Color color,
     required VoidCallback onTap,
   }) {
+    final scheme = Theme.of(context).colorScheme;
     return InkWell(
       borderRadius: BorderRadius.circular(999),
       onTap: onTap,
@@ -502,9 +419,9 @@ class _GlobalHistoryLineChartScreenState
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(999),
           border: Border.all(
-            color: selected ? Colors.white54 : Colors.white12,
+            color: selected ? scheme.primary : scheme.outlineVariant,
           ),
-          color: selected ? Colors.white10 : Colors.transparent,
+          color: selected ? scheme.primaryContainer : Colors.transparent,
         ),
         child: Row(mainAxisSize: MainAxisSize.min, children: [
           Container(
@@ -514,8 +431,13 @@ class _GlobalHistoryLineChartScreenState
                 BoxDecoration(color: color, shape: BoxShape.circle),
           ),
           const SizedBox(width: 8),
-          Text(label,
-              style: const TextStyle(fontWeight: FontWeight.w700)),
+          Text(
+            label,
+            style: TextStyle(
+              fontWeight: FontWeight.w700,
+              color: selected ? scheme.onPrimaryContainer : scheme.onSurface,
+            ),
+          ),
         ]),
       ),
     );

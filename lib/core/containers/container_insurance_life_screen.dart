@@ -8,6 +8,7 @@ import '../finance/add_transaction_sheet.dart';
 import '../finance/transaction_type.dart';
 import '../../help/help_screen.dart';
 import '../../help/help_topic.dart';
+import '../../theme/app_colors.dart';
 
 class ContainerInsuranceLifeScreen extends StatefulWidget {
   final ContainerModel container;
@@ -155,9 +156,9 @@ class _ContainerInsuranceLifeScreenState
               _correctedValue == null
                   ? '—'
                   : '${_correctedValue!.toStringAsFixed(2)} €',
-              style: const TextStyle(
+              style: TextStyle(
                 fontWeight: FontWeight.bold,
-                color: Colors.orange,
+                color: context.appColors.warning,
               ),
             ),
             onTap: _editCorrectedValue,

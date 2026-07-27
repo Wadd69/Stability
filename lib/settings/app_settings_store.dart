@@ -31,4 +31,14 @@ class AppSettingsStore {
   static void setActiveAccountId(String id) {
     _box.put('activeAccountId', id);
   }
+
+  static void clearActiveAccountId() {
+    _box.delete('activeAccountId');
+  }
+
+  static bool get hasSeenWelcome => _box.get('hasSeenWelcome') as bool? ?? false;
+
+  static void setHasSeenWelcome(bool value) {
+    _box.put('hasSeenWelcome', value);
+  }
 }

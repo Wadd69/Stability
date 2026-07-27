@@ -1,8 +1,10 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:hive/hive.dart';
 import 'package:stability/core/finance/transaction_type.dart';
 import '../core/finance/transaction.dart';
+import '../backend/realtime_account_events_service.dart';
 
 import '../accounts/current_account.dart';
 import '../accounts/account_selector_screen.dart';
@@ -18,7 +20,6 @@ import '../core/finance/categories_screen.dart';
 
 import '../recap/month_recap_screen.dart';
 import '../archives/archives_screen.dart';
-import '../core/archives/archives_store.dart';
 
 import '../containers/containers_screen.dart';
 import '../core/containers/containers_store.dart';
@@ -40,10 +41,14 @@ import '../core/budget_rules/category_allocations_store.dart';
 import '../core/budget_rules/budget_screen.dart';
 import '../core/budget_rules/fifty_thirty_twenty_screen.dart';
 import '../core/budget_rules/custom_mode_placeholder_screen.dart';
+import '../core/budget_rules/budget_automation_service.dart';
+import '../core/budget_rules/launch_month_budget_screen.dart';
 import '../accounts/management_mode.dart';
 import '../core/finance/recurring_transactions_store.dart';
 import '../core/finance/recurring_transactions_screen.dart';
 import '../core/finance/transactions_list_screen.dart';
+import '../patrimoine/net_worth_screen.dart';
+import '../theme/app_colors.dart';
 
 class DashboardScreen extends StatefulWidget {
   const DashboardScreen({super.key});
@@ -53,6 +58,78 @@ class DashboardScreen extends StatefulWidget {
 }
 
 class _DashboardScreenState extends State<DashboardScreen> {
+  final _realtimeService = RealtimeAccountEventsService();
+  StreamSubscription<AccountEvent>? _eventsSub;
+  final List<AccountEvent> _recentEvents = [];
+  String? _realtimeAccountId;
+
+  @override
+  void initState() {
+    super.initState();
+    _eventsSub = _realtimeService.events.listen((event) {
+      if (!mounted) return;
+      setState(() {
+        _recentEvents.insert(0, event);
+        if (_recentEvents.length > 20) {
+          _recentEvents.removeRange(20, _recentEvents.length);
+        }
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(event.message)),
+      );
+    });
+    _syncRealtimeSubscription();
+  }
+
+  @override
+  void dispose() {
+    _eventsSub?.cancel();
+    _realtimeService.dispose();
+    super.dispose();
+  }
+
+  /// (Ré)abonne le flux temps réel au compte actif s'il est partagé —
+  /// à rappeler après un changement de compte actif.
+  void _syncRealtimeSubscription() {
+    final account = CurrentAccount.active;
+    if (!account.isShared) {
+      _realtimeService.unsubscribe();
+      _realtimeAccountId = null;
+      return;
+    }
+    if (_realtimeAccountId == account.id) return;
+    _realtimeAccountId = account.id;
+    _realtimeService.subscribe(account.id);
+  }
+
+  void _openActivityFeed() {
+    showModalBottomSheet(
+      context: context,
+      builder: (_) => SafeArea(
+        child: _recentEvents.isEmpty
+            ? const Padding(
+                padding: EdgeInsets.all(24),
+                child: Text('Aucune activité récente sur ce compte.'),
+              )
+            : ListView(
+                shrinkWrap: true,
+                children: _recentEvents
+                    .map(
+                      (e) => ListTile(
+                        leading: const Icon(Icons.notifications_none),
+                        title: Text(e.message),
+                        subtitle: Text(
+                          '${e.at.hour.toString().padLeft(2, '0')}:'
+                          '${e.at.minute.toString().padLeft(2, '0')}',
+                        ),
+                      ),
+                    )
+                    .toList(),
+              ),
+      ),
+    );
+  }
+
   DateTime get _now => DateTime.now();
 
   String _monthLabel(DateTime d) {
@@ -70,96 +147,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
     return DateTime(y, m, 1);
   }
 
-  String _currentMonthKey() {
-    final now = DateTime.now();
-    return '${now.year}-${now.month.toString().padLeft(2, '0')}';
-  }
-
   String _nextMonthKey(String monthKey) {
     final d = _dateFromMonthKey(monthKey);
     final next = DateTime(d.year, d.month + 1, 1);
     return '${next.year}-${next.month.toString().padLeft(2, '0')}';
-  }
-
-  Future<void> _safeClearBox(String boxName) async {
-    try {
-      final box = Hive.isBoxOpen(boxName)
-          ? Hive.box(boxName)
-          : await Hive.openBox(boxName);
-      await box.clear();
-    } catch (_) {}
-  }
-
-  Future<void> _devResetMontant() async {
-    final ok = await showDialog<bool>(
-      context: context,
-      builder: (_) => AlertDialog(
-        title: const Text('DEV — Reset montants'),
-        content: const Text(
-          'Supprime transactions + archives.\n'
-          'Conserve catégories, supports, compte actif.\n'
-          'Force le mois actif au mois courant.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('Annuler'),
-          ),
-          ElevatedButton(
-            onPressed: () => Navigator.pop(context, true),
-            child: const Text('RESET'),
-          ),
-        ],
-      ),
-    );
-
-    if (ok != true) return;
-
-    TransactionsStore.clearAll();
-    ArchivesStore.clear();
-    await MonthlyBalancesStore.clearAll();
-
-    ActiveMonthStore.set(_currentMonthKey());
-
-    setState(() {});
-  }
-
-  Future<void> _devResetTotal() async {
-    final ok = await showDialog<bool>(
-      context: context,
-      builder: (_) => AlertDialog(
-        title: const Text('DEV — RESET TOTAL'),
-        content: const Text('⚠️ Supprime TOUT.\nRetour état premier lancement.'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('Annuler'),
-          ),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
-            onPressed: () => Navigator.pop(context, true),
-            child: const Text('TOUT SUPPRIMER'),
-          ),
-        ],
-      ),
-    );
-
-    if (ok != true) return;
-    if (!mounted) return;
-
-    TransactionsStore.clearAll();
-    ArchivesStore.clear();
-    CategoriesStore.clear();
-    context.read<ContainersStore>().clearAll();
-    await MonthlyBalancesStore.clearAll();
-    await CategoryAllocationsStore.clearAll();
-    await _safeClearBox('category_goals');
-    RecurringTransactionsStore.clear();
-
-    await _safeClearBox('active_month');
-    await ActiveMonthStore.init();
-
-    setState(() {});
   }
 
   void _openAddTransaction(
@@ -184,6 +175,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
       case ManagementMode.zeroBudget:
         return [
           IconButton(
+            tooltip: 'Budget',
             icon: const Icon(Icons.account_balance_wallet),
             onPressed: () {
               Navigator.push(
@@ -204,6 +196,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
       case ManagementMode.fiftyThirtyTwenty:
         return [
           IconButton(
+            tooltip: '50/30/20',
             icon: const Icon(Icons.pie_chart_outline),
             onPressed: () {
               Navigator.push(
@@ -224,6 +217,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
       case ManagementMode.custom:
         return [
           IconButton(
+            tooltip: 'Mode personnalisé',
             icon: const Icon(Icons.tune),
             onPressed: () {
               Navigator.push(
@@ -239,6 +233,94 @@ class _DashboardScreenState extends State<DashboardScreen> {
       case ManagementMode.free:
         return [];
     }
+  }
+
+  Widget _buildDrawer() {
+    final account = CurrentAccount.active;
+
+    Widget destinationTile({
+      required IconData icon,
+      required String label,
+      required Widget Function() screenBuilder,
+      bool refreshOnReturn = false,
+    }) {
+      return ListTile(
+        leading: Icon(icon),
+        title: Text(label),
+        onTap: () async {
+          Navigator.pop(context); // ferme le tiroir
+          if (refreshOnReturn) {
+            await Navigator.push(
+              context,
+              MaterialPageRoute(builder: (_) => screenBuilder()),
+            );
+            setState(() {});
+          } else {
+            Navigator.push(
+              context,
+              MaterialPageRoute(builder: (_) => screenBuilder()),
+            );
+          }
+        },
+      );
+    }
+
+    return Drawer(
+      child: SafeArea(
+        child: Column(
+          children: [
+            DrawerHeader(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: [
+                  Text(
+                    account.name,
+                    style: const TextStyle(
+                      fontSize: 20,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    account.managementMode.label,
+                    style: Theme.of(context).textTheme.bodySmall,
+                  ),
+                ],
+              ),
+            ),
+            destinationTile(
+              icon: Icons.insights,
+              label: 'Patrimoine',
+              screenBuilder: () => const NetWorthScreen(),
+            ),
+            destinationTile(
+              icon: Icons.receipt_long,
+              label: 'Transactions',
+              screenBuilder: () => const TransactionsListScreen(),
+              refreshOnReturn: true,
+            ),
+            destinationTile(
+              icon: Icons.archive,
+              label: 'Archives',
+              screenBuilder: () => ArchivesScreen(),
+            ),
+            destinationTile(
+              icon: Icons.event_repeat,
+              label: 'Transactions récurrentes',
+              screenBuilder: () => const RecurringTransactionsScreen(),
+              refreshOnReturn: true,
+            ),
+            destinationTile(
+              icon: Icons.settings,
+              label: 'Réglages',
+              screenBuilder: () => const SettingsScreen(),
+            ),
+            const Spacer(),
+          ],
+        ),
+      ),
+    );
   }
 
   void _openAddMenu() {
@@ -273,6 +355,90 @@ class _DashboardScreenState extends State<DashboardScreen> {
           ),
         ],
       ),
+    );
+  }
+
+  void _openBudgetAutomationMenu() {
+    final monthKey = ActiveMonthStore.current;
+    showModalBottomSheet(
+      context: context,
+      builder: (_) => Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          ListTile(
+            leading: const Icon(Icons.bolt),
+            title: const Text('Lancer le budget du mois'),
+            subtitle: const Text(
+              'Crée les virements automatiques vers vos supports configurés',
+            ),
+            onTap: () async {
+              Navigator.pop(context);
+              await Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => LaunchMonthBudgetScreen(
+                    monthKey: monthKey,
+                    monthLabel: _monthLabel(_dateFromMonthKey(monthKey)),
+                  ),
+                ),
+              );
+              setState(() {});
+            },
+          ),
+          ListTile(
+            leading: const Icon(Icons.done_all),
+            title: const Text('Valider les virements'),
+            subtitle: const Text(
+              'Marque comme pointés tous les virements du budget du mois',
+            ),
+            onTap: () {
+              Navigator.pop(context);
+              _confirmValidateTransfers(monthKey);
+            },
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _confirmValidateTransfers(String monthKey) async {
+    if (!BudgetAutomationService.hasPendingTransfers(monthKey)) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Aucun virement en attente ce mois-ci.')),
+      );
+      return;
+    }
+
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: const Text('Valider les virements'),
+        content: const Text(
+          'Tous les virements du budget du mois seront marqués comme '
+          'pointés. Vous pourrez toujours en modifier un individuellement '
+          'ensuite.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Annuler'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Valider'),
+          ),
+        ],
+      ),
+    );
+
+    if (ok != true) return;
+    if (!mounted) return;
+
+    final count = BudgetAutomationService.validateTransfers(monthKey);
+    setState(() {});
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('$count virement${count > 1 ? 's' : ''} validé${count > 1 ? 's' : ''}.')),
     );
   }
 
@@ -374,56 +540,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
         title: Text(account.name),
         actions: [
           IconButton(
-            icon: const Icon(Icons.restart_alt),
-            onPressed: _devResetMontant,
-          ),
-          IconButton(
-            icon: const Icon(Icons.warning_amber_rounded),
-            onPressed: _devResetTotal,
-          ),
-          IconButton(
-            icon: const Icon(Icons.receipt_long),
-            onPressed: () async {
-              await Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (_) => const TransactionsListScreen(),
-                ),
-              );
-              setState(() {});
-            },
-          ),
-          IconButton(
-            icon: const Icon(Icons.archive),
-            onPressed: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(builder: (_) => ArchivesScreen()),
-              );
-            },
-          ),
-          IconButton(
-            icon: const Icon(Icons.event_repeat),
-            onPressed: () async {
-              await Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (_) => const RecurringTransactionsScreen(),
-                ),
-              );
-              setState(() {});
-            },
-          ),
-          IconButton(
-            icon: const Icon(Icons.settings),
-            onPressed: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(builder: (_) => const SettingsScreen()),
-              );
-            },
-          ),
-          IconButton(
+            tooltip: 'Aide',
             icon: const Icon(Icons.help_outline),
             onPressed: () {
               Navigator.push(
@@ -435,6 +552,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
             },
           ),
           IconButton(
+            tooltip: 'Changer de compte',
             icon: const Icon(Icons.person),
             onPressed: () async {
               await Navigator.push(
@@ -443,11 +561,23 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   builder: (_) => const AccountSelectorScreen(),
                 ),
               );
+              _syncRealtimeSubscription();
               setState(() {});
             },
           ),
+          if (account.isShared)
+            IconButton(
+              tooltip: 'Activité du compte',
+              icon: Badge(
+                isLabelVisible: _recentEvents.isNotEmpty,
+                label: Text('${_recentEvents.length}'),
+                child: const Icon(Icons.notifications_none),
+              ),
+              onPressed: _openActivityFeed,
+            ),
         ],
       ),
+      drawer: _buildDrawer(),
       bottomNavigationBar: SafeArea(
         child: SizedBox(
           height: 56,
@@ -455,6 +585,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
             mainAxisAlignment: MainAxisAlignment.spaceAround,
             children: [
               IconButton(
+                tooltip: 'Supports',
                 icon: const Icon(Icons.account_balance),
                 onPressed: () async {
                   await Navigator.push(
@@ -465,6 +596,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 },
               ),
               IconButton(
+                tooltip: 'Catégories',
                 icon: const Icon(Icons.category),
                 onPressed: () {
                   Navigator.push(
@@ -475,10 +607,17 @@ class _DashboardScreenState extends State<DashboardScreen> {
               ),
               ..._modeSpecificIcons(),
               IconButton(
+                tooltip: 'Automatisation budget',
+                icon: const Icon(Icons.bolt),
+                onPressed: _openBudgetAutomationMenu,
+              ),
+              IconButton(
+                tooltip: 'Ajouter',
                 icon: const Icon(Icons.add_circle),
                 onPressed: _openAddMenu,
               ),
               IconButton(
+                tooltip: 'Récap du mois',
                 icon: const Icon(Icons.pie_chart),
                 onPressed: () {
                   Navigator.push(
@@ -494,6 +633,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 },
               ),
               IconButton(
+                tooltip: 'Clôturer le mois',
                 icon: const Icon(Icons.double_arrow),
                 onPressed: _confirmCloseMonth,
               ),
@@ -596,7 +736,10 @@ class _DashboardContainersAndTransactionsState
           ),
           TextButton(
             onPressed: () => Navigator.pop(context, true),
-            child: const Text('Supprimer', style: TextStyle(color: Colors.red)),
+            child: Text(
+              'Supprimer',
+              style: TextStyle(color: context.appColors.negative),
+            ),
           ),
         ],
       ),
@@ -719,10 +862,10 @@ class _DashboardContainersAndTransactionsState
                 style: TextStyle(
                   fontWeight: FontWeight.bold,
                   color: total > 0
-                      ? Colors.green
+                      ? context.appColors.positive
                       : total < 0
-                          ? Colors.red
-                          : Colors.black,
+                          ? context.appColors.negative
+                          : Theme.of(context).colorScheme.onSurface,
                 ),
               ),
               children: [
@@ -752,10 +895,10 @@ class _DashboardContainersAndTransactionsState
                       style: TextStyle(
                         fontWeight: FontWeight.w600,
                         color: amount > 0
-                            ? Colors.green
+                            ? context.appColors.positive
                             : amount < 0
-                                ? Colors.red
-                                : Colors.black,
+                                ? context.appColors.negative
+                                : Theme.of(context).colorScheme.onSurface,
                       ),
                     ),
                     children: [
@@ -770,7 +913,7 @@ class _DashboardContainersAndTransactionsState
                           background: Container(
                             alignment: Alignment.centerRight,
                             padding: const EdgeInsets.symmetric(horizontal: 24),
-                            color: Colors.red,
+                            color: context.appColors.negative,
                             child: const Icon(Icons.delete, color: Colors.white),
                           ),
                           confirmDismiss: (_) => _confirmDeleteTransaction(t),
@@ -784,7 +927,9 @@ class _DashboardContainersAndTransactionsState
                                 const EdgeInsets.symmetric(horizontal: 48),
                             leading: Icon(
                               isIncome ? Icons.add : Icons.remove,
-                              color: isIncome ? Colors.green : Colors.red,
+                              color: isIncome
+                                  ? context.appColors.positive
+                                  : context.appColors.negative,
                             ),
                             title: Row(
                               children: [
@@ -810,8 +955,10 @@ class _DashboardContainersAndTransactionsState
                                         : Icons.schedule,
                                     size: 18,
                                     color: t.isCleared
-                                        ? Colors.green
-                                        : Colors.grey,
+                                        ? context.appColors.positive
+                                        : Theme.of(context)
+                                            .colorScheme
+                                            .onSurfaceVariant,
                                   ),
                                   const SizedBox(width: 6),
                                 ],
@@ -820,8 +967,12 @@ class _DashboardContainersAndTransactionsState
                                   style: TextStyle(
                                     fontWeight: FontWeight.bold,
                                     color: t.isCarryOver
-                                        ? Colors.grey
-                                        : (isIncome ? Colors.green : Colors.red),
+                                        ? Theme.of(context)
+                                            .colorScheme
+                                            .onSurfaceVariant
+                                        : (isIncome
+                                            ? context.appColors.positive
+                                            : context.appColors.negative),
                                   ),
                                 ),
                               ],
@@ -851,13 +1002,15 @@ class _DedicatedContainerTile extends StatelessWidget {
 
   const _DedicatedContainerTile({required this.container});
 
-  Widget _trailingValue() {
+  Widget _trailingValue(BuildContext context) {
+    final neutral = Theme.of(context).colorScheme.onSurfaceVariant;
+
     if (container.type == ContainerType.investmentAccount) {
       final count =
           container.cryptoHoldings.length + container.stockHoldings.length;
       return Text(
         count == 0 ? 'Aucune position' : '$count position${count > 1 ? 's' : ''}',
-        style: const TextStyle(color: Colors.grey),
+        style: TextStyle(color: neutral),
       );
     }
 
@@ -878,7 +1031,7 @@ class _DedicatedContainerTile extends StatelessWidget {
       displayed == null ? 'Non configuré' : '${displayed.toStringAsFixed(2)} €',
       style: TextStyle(
         fontWeight: FontWeight.bold,
-        color: displayed == null ? Colors.grey : null,
+        color: displayed == null ? neutral : null,
       ),
     );
   }
@@ -892,7 +1045,7 @@ class _DedicatedContainerTile extends StatelessWidget {
       trailing: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          _trailingValue(),
+          _trailingValue(context),
           const SizedBox(width: 4),
           const Icon(Icons.chevron_right),
         ],

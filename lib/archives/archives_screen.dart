@@ -5,6 +5,7 @@ import '../core/finance/categories_store.dart';
 import 'package:stability/core/finance/finance.dart';
 import '../help/help_screen.dart';
 import '../help/help_topic.dart';
+import '../theme/app_colors.dart';
 
 import 'month_archive_screen.dart';
 import 'charts/year_charts_screen.dart';
@@ -233,7 +234,9 @@ class _ArchivesScreenState extends State<ArchivesScreen>
                   '${m.balance.toStringAsFixed(2)} €',
                   style: TextStyle(
                     fontWeight: FontWeight.bold,
-                    color: m.balance >= 0 ? Colors.green : Colors.red,
+                    color: m.balance >= 0
+                        ? context.appColors.positive
+                        : context.appColors.negative,
                   ),
                 ),
                 onTap: () {
@@ -276,7 +279,9 @@ class _ArchivesScreenState extends State<ArchivesScreen>
               'Solde : ${balance.toStringAsFixed(2)} €',
               style: TextStyle(
                 fontWeight: FontWeight.bold,
-                color: balance >= 0 ? Colors.green : Colors.red,
+                color: balance >= 0
+                    ? context.appColors.positive
+                    : context.appColors.negative,
               ),
             ),
           ],

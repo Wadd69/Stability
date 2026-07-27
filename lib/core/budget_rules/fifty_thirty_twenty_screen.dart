@@ -7,6 +7,7 @@ import '../finance/transaction_type.dart';
 import 'category_allocations_store.dart';
 import '../../help/help_screen.dart';
 import '../../help/help_topic.dart';
+import '../../theme/app_colors.dart';
 
 class FiftyThirtyTwentyScreen extends StatefulWidget {
   final String monthKey;
@@ -163,8 +164,12 @@ class _FiftyThirtyTwentyScreenState extends State<FiftyThirtyTwentyScreen> {
                         child: LinearProgressIndicator(
                           value: ratio > 1 ? 1 : ratio.toDouble(),
                           minHeight: 8,
-                          backgroundColor: Colors.grey.shade300,
-                          color: over ? Colors.red : Colors.green,
+                          backgroundColor: Theme.of(context)
+                              .colorScheme
+                              .surfaceContainerHighest,
+                          color: over
+                              ? context.appColors.negative
+                              : context.appColors.positive,
                         ),
                       ),
                       const SizedBox(height: 8),
@@ -172,7 +177,7 @@ class _FiftyThirtyTwentyScreenState extends State<FiftyThirtyTwentyScreen> {
                         '${spent.toStringAsFixed(2)} € dépensés sur '
                         '${target.toStringAsFixed(2)} € prévus',
                         style: TextStyle(
-                          color: over ? Colors.red : null,
+                          color: over ? context.appColors.negative : null,
                           fontWeight: over ? FontWeight.bold : null,
                         ),
                       ),
@@ -185,7 +190,7 @@ class _FiftyThirtyTwentyScreenState extends State<FiftyThirtyTwentyScreen> {
           if (unclassified > 0) ...[
             const SizedBox(height: 8),
             Card(
-              color: Colors.grey.withValues(alpha: 0.1),
+              color: Theme.of(context).colorScheme.surfaceContainerHighest,
               child: ListTile(
                 leading: const Icon(Icons.help_outline),
                 title: const Text('Dépenses non classées'),

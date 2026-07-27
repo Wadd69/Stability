@@ -377,6 +377,19 @@ class TransactionsStore {
     _save();
   }
 
+  /// Force explicitement l'état pointé (contrairement à [toggleCleared],
+  /// qui inverse toujours l'état courant) — utile pour une validation en
+  /// masse où l'état cible est connu à l'avance.
+  static void setCleared(String id, bool value) {
+    final index = _transactions.indexWhere((t) => t.id == id);
+    if (index == -1) return;
+
+    final t = _transactions[index];
+    _transactions[index] = t.copyWith(isCleared: value);
+
+    _save();
+  }
+
   // ─────────────────────────────────────────────
   // HELPERS
   // ─────────────────────────────────────────────

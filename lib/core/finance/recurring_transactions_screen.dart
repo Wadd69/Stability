@@ -8,6 +8,7 @@ import 'edit_recurring_transaction_sheet.dart';
 import 'active_month_store.dart';
 import '../../help/help_screen.dart';
 import '../../help/help_topic.dart';
+import '../../theme/app_colors.dart';
 
 class RecurringTransactionsScreen extends StatefulWidget {
   const RecurringTransactionsScreen({super.key});
@@ -52,7 +53,10 @@ class _RecurringTransactionsScreenState
               setState(() {});
               Navigator.pop(context);
             },
-            child: const Text('Supprimer', style: TextStyle(color: Colors.red)),
+            child: Text(
+              'Supprimer',
+              style: TextStyle(color: context.appColors.negative),
+            ),
           ),
         ],
       ),
@@ -109,7 +113,9 @@ class _RecurringTransactionsScreenState
                 return ListTile(
                   leading: Icon(
                     isIncome ? Icons.add_circle_outline : Icons.remove_circle_outline,
-                    color: isIncome ? Colors.green : Colors.red,
+                    color: isIncome
+                        ? context.appColors.positive
+                        : context.appColors.negative,
                   ),
                   title: Text(r.label),
                   subtitle: Text(
@@ -125,7 +131,9 @@ class _RecurringTransactionsScreenState
                         '${isIncome ? '+' : '-'}${r.amount.toStringAsFixed(2)} €',
                         style: TextStyle(
                           fontWeight: FontWeight.bold,
-                          color: isIncome ? Colors.green : Colors.red,
+                          color: isIncome
+                              ? context.appColors.positive
+                              : context.appColors.negative,
                         ),
                       ),
                       Switch(

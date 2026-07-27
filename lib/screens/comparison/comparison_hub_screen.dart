@@ -7,6 +7,7 @@ import '../../core/finance/categories_store.dart';
 import '../../core/finance/transaction.dart';
 import '../../help/help_screen.dart';
 import '../../help/help_topic.dart';
+import '../../theme/app_colors.dart';
 
 enum _CurveMetric { balance, income, expense } // ✅ AJOUT (courbe pro)
 
@@ -198,8 +199,8 @@ class _ComparisonHubScreenState extends State<ComparisonHubScreen> {
 
     final lineColor = switch (curveMetric) {
       _CurveMetric.balance => Theme.of(context).colorScheme.primary,
-      _CurveMetric.income => Colors.green,
-      _CurveMetric.expense => Colors.red,
+      _CurveMetric.income => context.appColors.positive,
+      _CurveMetric.expense => context.appColors.negative,
     };
 
     return ListView(
@@ -258,7 +259,9 @@ class _ComparisonHubScreenState extends State<ComparisonHubScreen> {
     return OutlinedButton(
       onPressed: () => setState(() => curveMetric = m),
       style: OutlinedButton.styleFrom(
-        backgroundColor: active ? Colors.white10 : null,
+        backgroundColor: active
+            ? Theme.of(context).colorScheme.primaryContainer
+            : null,
       ),
       child: Text(
         label,
@@ -282,7 +285,9 @@ class _ComparisonHubScreenState extends State<ComparisonHubScreen> {
           '${p.balance.toStringAsFixed(0)}$_currency',
           style: TextStyle(
             fontWeight: FontWeight.bold,
-            color: p.balance >= 0 ? Colors.green : Colors.red,
+            color: p.balance >= 0
+                ? context.appColors.positive
+                : context.appColors.negative,
           ),
         ),
       ),
@@ -650,8 +655,10 @@ class _ComparisonHubScreenState extends State<ComparisonHubScreen> {
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(999),
-          border: Border.all(color: Colors.white12),
-          color: Colors.white10,
+          border: Border.all(
+            color: Theme.of(context).colorScheme.outlineVariant,
+          ),
+          color: Theme.of(context).colorScheme.surfaceContainerHighest,
         ),
         child: Row(
           mainAxisSize: MainAxisSize.min,

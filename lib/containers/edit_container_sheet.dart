@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import '../core/containers/containers_store.dart';
 import '../core/containers/container_model.dart';
 import '../core/containers/container_type.dart';
+import '../shared/color_wheel_picker.dart';
 
 class EditContainerSheet extends StatefulWidget {
   final ContainerModel? container;
@@ -76,10 +77,12 @@ class _EditContainerSheetState extends State<EditContainerSheet> {
             const SizedBox(height: 8),
 
             if (forcePrimaryCreation)
-              const Text(
+              Text(
                 'Commencez par créer votre compte courant principal.\n'
                 'Vous pourrez ajouter d’autres supports ensuite.',
-                style: TextStyle(color: Colors.grey),
+                style: TextStyle(
+                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+                ),
               ),
 
             const SizedBox(height: 16),
@@ -169,9 +172,9 @@ class _EditContainerSheetState extends State<EditContainerSheet> {
                 const SizedBox(width: 12),
                 GestureDetector(
                   onTap: () async {
-                    final color = await showDialog<Color>(
-                      context: context,
-                      builder: (_) => _ColorPickerDialog(initial: _color),
+                    final color = await showColorWheelPicker(
+                      context,
+                      initialColor: _color,
                     );
                     if (color != null) {
                       setState(() => _color = color);
@@ -268,56 +271,6 @@ class _EditContainerSheetState extends State<EditContainerSheet> {
             const SizedBox(height: 12),
           ],
         ),
-      ),
-    );
-  }
-}
-
-// ─────────────────────────────────────────────
-// 🎨 SÉLECTEUR DE COULEUR
-// ─────────────────────────────────────────────
-
-class _ColorPickerDialog extends StatelessWidget {
-  final Color initial;
-
-  const _ColorPickerDialog({required this.initial});
-
-  @override
-  Widget build(BuildContext context) {
-    final colors = [
-      Colors.blue,
-      Colors.indigo,
-      Colors.deepPurple,
-      Colors.purple,
-      Colors.pink,
-      Colors.red,
-      Colors.orange,
-      Colors.amber,
-      Colors.yellow,
-      Colors.lime,
-      Colors.lightGreen,
-      Colors.green,
-      Colors.teal,
-      Colors.cyan,
-      Colors.lightBlue,
-      Colors.brown,
-      Colors.grey,
-      Colors.blueGrey,
-    ];
-
-    return AlertDialog(
-      title: const Text('Choisir une couleur'),
-      content: Wrap(
-        spacing: 12,
-        runSpacing: 12,
-        children: colors
-            .map(
-              (c) => GestureDetector(
-                onTap: () => Navigator.pop(context, c),
-                child: CircleAvatar(backgroundColor: c),
-              ),
-            )
-            .toList(),
       ),
     );
   }

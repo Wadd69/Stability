@@ -9,6 +9,7 @@ import '../finance/transactions_store.dart';
 import '../finance/active_month_store.dart';
 import '../../help/help_screen.dart';
 import '../../help/help_topic.dart';
+import '../../theme/app_colors.dart';
 
 /// Ligne calculée d’intérêt (lecture + correction possible)
 class InterestLine {
@@ -102,9 +103,11 @@ class ContainerInterestsScreen extends StatelessWidget {
                               if (l.isCorrected)
                                 Text(
                                   'Calculé : +${l.computedInterest.toStringAsFixed(2)} €',
-                                  style: const TextStyle(
+                                  style: TextStyle(
                                     fontSize: 12,
-                                    color: Colors.grey,
+                                    color: Theme.of(context)
+                                        .colorScheme
+                                        .onSurfaceVariant,
                                   ),
                                 ),
                             ],
@@ -116,8 +119,8 @@ class ContainerInterestsScreen extends StatelessWidget {
                                 '+${l.displayedInterest.toStringAsFixed(2)} €',
                                 style: TextStyle(
                                   color: l.isCorrected
-                                      ? Colors.orange
-                                      : Colors.green,
+                                      ? context.appColors.warning
+                                      : context.appColors.positive,
                                   fontWeight: FontWeight.bold,
                                 ),
                               ),

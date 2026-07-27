@@ -1,10 +1,14 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import 'categories_store.dart';
 import 'budget_bucket.dart';
 import '../../help/help_screen.dart';
 import '../../help/help_topic.dart';
 import '../../accounts/current_account.dart';
 import '../../accounts/management_mode.dart';
+import '../../theme/app_colors.dart';
+import '../../shared/color_wheel_picker.dart';
+import '../containers/containers_store.dart';
 
 class CategoriesScreen extends StatefulWidget {
   const CategoriesScreen({super.key});
@@ -14,18 +18,59 @@ class CategoriesScreen extends StatefulWidget {
 }
 
 class _CategoriesScreenState extends State<CategoriesScreen> {
-  static const List<Color> _palette = [
-    Colors.red,
-    Colors.orange,
-    Colors.yellow,
-    Colors.green,
-    Colors.teal,
-    Colors.blue,
-    Colors.indigo,
-    Colors.purple,
-    Colors.brown,
-    Colors.cyan,
-  ];
+  Widget _colorPicker({
+    required Color color,
+    required ValueChanged<Color> onChanged,
+  }) {
+    return Row(
+      children: [
+        const Text('Couleur'),
+        const SizedBox(width: 12),
+        GestureDetector(
+          onTap: () async {
+            final picked = await showColorWheelPicker(
+              context,
+              initialColor: color,
+            );
+            if (picked != null) onChanged(picked);
+          },
+          child: CircleAvatar(backgroundColor: color),
+        ),
+      ],
+    );
+  }
+
+  Widget _targetContainerPicker({
+    required String? selected,
+    required ValueChanged<String?> onChanged,
+  }) {
+    final containers = context.read<ContainersStore>().active;
+    return Padding(
+      padding: const EdgeInsets.only(top: 16),
+      child: DropdownButtonFormField<String?>(
+        initialValue: selected,
+        decoration: const InputDecoration(
+          labelText: 'Support de destination (optionnel)',
+          helperText:
+              'Où va l\'argent de cette catégorie quand vous lancez le '
+              'budget du mois. Laissez vide pour ne rien virer.',
+        ),
+        items: [
+          const DropdownMenuItem<String?>(
+            value: null,
+            child: Text('Aucun — reste sur le compte source'),
+          ),
+          ...containers.map(
+            (c) => DropdownMenuItem<String?>(
+              value: c.id,
+              child: Text(c.name),
+            ),
+          ),
+        ],
+        onChanged: onChanged,
+      ),
+    );
+  }
 
   Widget _bucketChips({
     required BudgetBucket? selected,
@@ -61,57 +106,41 @@ class _CategoriesScreenState extends State<CategoriesScreen> {
   // ─────────────────────────────────
   void _addCategory() {
     final controller = TextEditingController();
-    Color? selectedColor;
+    Color selectedColor = Colors.blue;
     BudgetBucket? selectedBucket;
+    String? selectedTargetContainerId;
 
     showDialog(
       context: context,
       builder: (_) => StatefulBuilder(
         builder: (context, setModalState) => AlertDialog(
           title: const Text('Nouvelle catégorie'),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              TextField(
-                controller: controller,
-                autofocus: true,
-                decoration:
-                    const InputDecoration(labelText: 'Nom'),
-              ),
-              const SizedBox(height: 16),
-              Wrap(
-                spacing: 8,
-                runSpacing: 8,
-                children: _palette.map((c) {
-                  final isSelected = selectedColor?.toARGB32() == c.toARGB32();
-                  return GestureDetector(
-                    onTap: () => setModalState(() => selectedColor = c),
-                    child: Container(
-                      width: 32,
-                      height: 32,
-                      decoration: BoxDecoration(
-                        color: c,
-                        shape: BoxShape.circle,
-                        border: Border.all(
-                          width: isSelected ? 3 : 1,
-                          color: isSelected
-                              ? Colors.black
-                              : Colors.grey.shade400,
-                        ),
-                      ),
-                      child: isSelected
-                          ? const Icon(Icons.check,
-                              size: 16, color: Colors.white)
-                          : null,
-                    ),
-                  );
-                }).toList(),
-              ),
-              _bucketChips(
-                selected: selectedBucket,
-                onChanged: (b) => setModalState(() => selectedBucket = b),
-              ),
-            ],
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextField(
+                  controller: controller,
+                  autofocus: true,
+                  decoration:
+                      const InputDecoration(labelText: 'Nom'),
+                ),
+                const SizedBox(height: 16),
+                _colorPicker(
+                  color: selectedColor,
+                  onChanged: (c) => setModalState(() => selectedColor = c),
+                ),
+                _bucketChips(
+                  selected: selectedBucket,
+                  onChanged: (b) => setModalState(() => selectedBucket = b),
+                ),
+                _targetContainerPicker(
+                  selected: selectedTargetContainerId,
+                  onChanged: (v) =>
+                      setModalState(() => selectedTargetContainerId = v),
+                ),
+              ],
+            ),
           ),
           actions: [
             TextButton(
@@ -119,20 +148,19 @@ class _CategoriesScreenState extends State<CategoriesScreen> {
               child: const Text('Annuler'),
             ),
             ElevatedButton(
-              onPressed: selectedColor == null
-                  ? null
-                  : () {
-                      final name = controller.text.trim();
-                      if (name.isNotEmpty) {
-                        CategoriesStore.add(
-                          name: name,
-                          colorValue: selectedColor!.toARGB32(), // ✅ marche
-                          bucket: selectedBucket,
-                        );
-                        setState(() {});
-                      }
-                      Navigator.pop(context);
-                    },
+              onPressed: () {
+                final name = controller.text.trim();
+                if (name.isNotEmpty) {
+                  CategoriesStore.add(
+                    name: name,
+                    colorValue: selectedColor.toARGB32(),
+                    bucket: selectedBucket,
+                    targetContainerId: selectedTargetContainerId,
+                  );
+                  setState(() {});
+                }
+                Navigator.pop(context);
+              },
               child: const Text('Ajouter'),
             ),
           ],
@@ -148,53 +176,37 @@ class _CategoriesScreenState extends State<CategoriesScreen> {
     final controller = TextEditingController(text: category.name);
     Color selectedColor = Color(category.colorValue);
     BudgetBucket? selectedBucket = category.bucket;
+    String? selectedTargetContainerId = category.targetContainerId;
 
     showDialog(
       context: context,
       builder: (_) => StatefulBuilder(
         builder: (context, setModalState) => AlertDialog(
           title: const Text('Modifier la catégorie'),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              TextField(
-                controller: controller,
-                autofocus: true,
-              ),
-              const SizedBox(height: 16),
-              Wrap(
-                spacing: 8,
-                runSpacing: 8,
-                children: _palette.map((c) {
-                  final isSelected = selectedColor.toARGB32() == c.toARGB32();
-                  return GestureDetector(
-                    onTap: () => setModalState(() => selectedColor = c),
-                    child: Container(
-                      width: 32,
-                      height: 32,
-                      decoration: BoxDecoration(
-                        color: c,
-                        shape: BoxShape.circle,
-                        border: Border.all(
-                          width: isSelected ? 3 : 1,
-                          color: isSelected
-                              ? Colors.black
-                              : Colors.grey.shade400,
-                        ),
-                      ),
-                      child: isSelected
-                          ? const Icon(Icons.check,
-                              size: 16, color: Colors.white)
-                          : null,
-                    ),
-                  );
-                }).toList(),
-              ),
-              _bucketChips(
-                selected: selectedBucket,
-                onChanged: (b) => setModalState(() => selectedBucket = b),
-              ),
-            ],
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextField(
+                  controller: controller,
+                  autofocus: true,
+                ),
+                const SizedBox(height: 16),
+                _colorPicker(
+                  color: selectedColor,
+                  onChanged: (c) => setModalState(() => selectedColor = c),
+                ),
+                _bucketChips(
+                  selected: selectedBucket,
+                  onChanged: (b) => setModalState(() => selectedBucket = b),
+                ),
+                _targetContainerPicker(
+                  selected: selectedTargetContainerId,
+                  onChanged: (v) =>
+                      setModalState(() => selectedTargetContainerId = v),
+                ),
+              ],
+            ),
           ),
           actions: [
             TextButton(
@@ -211,6 +223,8 @@ class _CategoriesScreenState extends State<CategoriesScreen> {
                     colorValue: selectedColor.toARGB32(), // ✅ marche
                     bucket: selectedBucket,
                     clearBucket: selectedBucket == null,
+                    targetContainerId: selectedTargetContainerId,
+                    clearTargetContainer: selectedTargetContainerId == null,
                   );
                   setState(() {});
                 }
@@ -247,9 +261,9 @@ class _CategoriesScreenState extends State<CategoriesScreen> {
               setState(() {});
               Navigator.pop(context);
             },
-            child: const Text(
+            child: Text(
               'Supprimer',
-              style: TextStyle(color: Colors.red),
+              style: TextStyle(color: context.appColors.negative),
             ),
           ),
         ],

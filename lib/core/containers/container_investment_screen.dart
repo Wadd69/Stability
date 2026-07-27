@@ -11,6 +11,7 @@ import '../../settings/app_settings_store.dart';
 import '../../settings/settings_screen.dart';
 import '../../help/help_screen.dart';
 import '../../help/help_topic.dart';
+import '../../theme/app_colors.dart';
 
 class ContainerInvestmentScreen extends StatefulWidget {
   final ContainerModel container;
@@ -454,7 +455,7 @@ class _ContainerInvestmentScreenState
             loading: _loadingCrypto,
             onRefresh: _refreshCryptoPrices,
           ),
-          if (_cryptoError != null) _errorBanner(_cryptoError!),
+          if (_cryptoError != null) _errorBanner(context, _cryptoError!),
           if (_cryptoHoldings.isEmpty)
             const Padding(
               padding: EdgeInsets.all(16),
@@ -496,10 +497,10 @@ class _ContainerInvestmentScreenState
             loading: _loadingStocks,
             onRefresh: _refreshStockPrices,
           ),
-          if (_stockError != null) _errorBanner(_stockError!),
+          if (_stockError != null) _errorBanner(context, _stockError!),
           if (AppSettingsStore.finnhubApiKey == null)
             ListTile(
-              leading: const Icon(Icons.key, color: Colors.orange),
+              leading: Icon(Icons.key, color: context.appColors.warning),
               title: const Text('Aucune clé API configurée'),
               subtitle: const Text('Nécessaire pour suivre des actions/ETF'),
               trailing: TextButton(
@@ -584,11 +585,11 @@ class _ContainerInvestmentScreenState
     );
   }
 
-  Widget _errorBanner(String message) {
+  Widget _errorBanner(BuildContext context, String message) {
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-      color: Colors.orange.withValues(alpha: 0.15),
+      color: context.appColors.warning.withValues(alpha: 0.15),
       child: Text(message),
     );
   }

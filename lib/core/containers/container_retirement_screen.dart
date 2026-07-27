@@ -8,6 +8,7 @@ import '../finance/add_transaction_sheet.dart';
 import '../finance/transaction_type.dart';
 import '../../help/help_screen.dart';
 import '../../help/help_topic.dart';
+import '../../theme/app_colors.dart';
 
 class ContainerRetirementScreen extends StatefulWidget {
   final ContainerModel container;
@@ -93,7 +94,9 @@ class _ContainerRetirementScreenState
               padding: const EdgeInsets.all(12),
               margin: const EdgeInsets.only(bottom: 16),
               decoration: BoxDecoration(
-                color: (_isLocked ? Colors.orange : Colors.green)
+                color: (_isLocked
+                        ? context.appColors.warning
+                        : context.appColors.positive)
                     .withValues(alpha: 0.1),
                 borderRadius: BorderRadius.circular(8),
               ),
@@ -101,7 +104,9 @@ class _ContainerRetirementScreenState
                 children: [
                   Icon(
                     _isLocked ? Icons.lock_outline : Icons.lock_open,
-                    color: _isLocked ? Colors.orange : Colors.green,
+                    color: _isLocked
+                        ? context.appColors.warning
+                        : context.appColors.positive,
                   ),
                   const SizedBox(width: 8),
                   Expanded(
@@ -198,9 +203,9 @@ class _ContainerRetirementScreenState
               _correctedValue == null
                   ? '—'
                   : '${_correctedValue!.toStringAsFixed(2)} €',
-              style: const TextStyle(
+              style: TextStyle(
                 fontWeight: FontWeight.bold,
-                color: Colors.orange,
+                color: context.appColors.warning,
               ),
             ),
             onTap: _editCorrectedValue,

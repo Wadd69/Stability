@@ -11,19 +11,6 @@ class HelpScreen extends StatelessWidget {
     required this.topic,
   });
 
-  String _modeLabel(ManagementMode mode) {
-    switch (mode) {
-      case ManagementMode.free:
-        return 'Suivi libre';
-      case ManagementMode.zeroBudget:
-        return 'Budget base zéro';
-      case ManagementMode.fiftyThirtyTwenty:
-        return 'Règle 50 / 30 / 20';
-      case ManagementMode.custom:
-        return 'Personnalisé';
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
     final content = helpContents[topic]!;
@@ -49,7 +36,7 @@ class HelpScreen extends StatelessWidget {
             ),
             const SizedBox(height: 8),
             Text(
-              _modeLabel(CurrentAccount.active.managementMode),
+              CurrentAccount.active.managementMode.label,
               style: const TextStyle(fontSize: 16),
             ),
           ],

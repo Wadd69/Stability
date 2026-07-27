@@ -3,6 +3,9 @@ import 'package:fl_chart/fl_chart.dart';
 import 'package:stability/core/finance/transaction_type.dart';
 
 import '../../core/finance/transaction.dart';
+import '../../theme/app_colors.dart';
+import '../../help/help_screen.dart';
+import '../../help/help_topic.dart';
 
 class CategoryChartsScreen extends StatefulWidget {
   final String title;
@@ -38,6 +41,21 @@ class _CategoryChartsScreenState extends State<CategoryChartsScreen> {
     return _shade(base, (0.2 + 0.8 * n).clamp(0, 1));
   }
 
+  Widget _helpAction(BuildContext context) {
+    return IconButton(
+      tooltip: 'Aide',
+      icon: const Icon(Icons.help_outline),
+      onPressed: () {
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (_) => const HelpScreen(topic: HelpTopic.archiveDetail),
+          ),
+        );
+      },
+    );
+  }
+
   // ─────────────────────────
   @override
   Widget build(BuildContext context) {
@@ -48,7 +66,10 @@ class _CategoryChartsScreenState extends State<CategoryChartsScreen> {
 
     if (expenses.isEmpty) {
       return Scaffold(
-        appBar: AppBar(title: Text(widget.title)),
+        appBar: AppBar(
+          title: Text(widget.title),
+          actions: [_helpAction(context)],
+        ),
         body: const Center(child: Text('Aucune dépense')),
       );
     }
@@ -65,6 +86,7 @@ class _CategoryChartsScreenState extends State<CategoryChartsScreen> {
             tooltip: asPercentage ? 'Afficher en montant' : 'Afficher en %',
             onPressed: () => setState(() => asPercentage = !asPercentage),
           ),
+          _helpAction(context),
         ],
       ),
       body: ListView(
@@ -174,8 +196,8 @@ class _CategoryChartsScreenState extends State<CategoryChartsScreen> {
       title: Text(t.label),
       trailing: Text(
         '-${t.amount.toStringAsFixed(2)}$_currencySymbol',
-        style: const TextStyle(
-          color: Colors.red,
+        style: TextStyle(
+          color: context.appColors.negative,
           fontWeight: FontWeight.bold,
         ),
       ),

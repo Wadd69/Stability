@@ -9,6 +9,7 @@ import 'transactions_store.dart';
 import 'add_transaction_sheet.dart';
 import '../../help/help_screen.dart';
 import '../../help/help_topic.dart';
+import '../../theme/app_colors.dart';
 
 class TransactionsListScreen extends StatefulWidget {
   const TransactionsListScreen({super.key});
@@ -258,7 +259,10 @@ class _TransactionsListScreenState extends State<TransactionsListScreen> {
           ),
           TextButton(
             onPressed: () => Navigator.pop(context, true),
-            child: const Text('Supprimer', style: TextStyle(color: Colors.red)),
+            child: Text(
+              'Supprimer',
+              style: TextStyle(color: context.appColors.negative),
+            ),
           ),
         ],
       ),
@@ -348,7 +352,7 @@ class _TransactionsListScreenState extends State<TransactionsListScreen> {
                         background: Container(
                           alignment: Alignment.centerRight,
                           padding: const EdgeInsets.symmetric(horizontal: 24),
-                          color: Colors.red,
+                          color: context.appColors.negative,
                           child: const Icon(Icons.delete, color: Colors.white),
                         ),
                         confirmDismiss: (_) => _confirmDelete(t),
@@ -360,7 +364,9 @@ class _TransactionsListScreenState extends State<TransactionsListScreen> {
                           onTap: () => _editTransaction(t),
                           leading: Icon(
                             isIncome ? Icons.add : Icons.remove,
-                            color: isIncome ? Colors.green : Colors.red,
+                            color: isIncome
+                                ? context.appColors.positive
+                                : context.appColors.negative,
                           ),
                           title: Row(
                             children: [
@@ -388,7 +394,9 @@ class _TransactionsListScreenState extends State<TransactionsListScreen> {
                             '${isIncome ? '+' : '-'}${t.amount.toStringAsFixed(2)} €',
                             style: TextStyle(
                               fontWeight: FontWeight.bold,
-                              color: isIncome ? Colors.green : Colors.red,
+                              color: isIncome
+                                  ? context.appColors.positive
+                                  : context.appColors.negative,
                             ),
                           ),
                         ),

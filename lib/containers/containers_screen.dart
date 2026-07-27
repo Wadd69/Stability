@@ -7,6 +7,7 @@ import '../core/containers/container_type.dart'; // ✅ AJOUT IMPORTANT
 import 'edit_container_sheet.dart';
 import '../help/help_screen.dart';
 import '../help/help_topic.dart';
+import '../theme/app_colors.dart';
 
 class ContainersScreen extends StatelessWidget {
   const ContainersScreen({super.key});
@@ -116,9 +117,9 @@ class _ContainerTile extends StatelessWidget {
                   ),
                   TextButton(
                     onPressed: () => Navigator.pop(context, true),
-                    child: const Text(
+                    child: Text(
                       'Supprimer',
-                      style: TextStyle(color: Colors.red),
+                      style: TextStyle(color: context.appColors.negative),
                     ),
                   ),
                 ],

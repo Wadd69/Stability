@@ -10,11 +10,17 @@ class Category {
   /// Classement 50/30/20 (uniquement utilisé dans ce mode de gestion).
   final BudgetBucket? bucket;
 
+  /// Support vers lequel l'argent de cette catégorie doit être viré
+  /// automatiquement (voir "Lancer le budget du mois"). `null` = l'argent
+  /// reste sur le compte source, pas de virement automatique.
+  final String? targetContainerId;
+
   Category({
     required this.id,
     required this.name,
     required this.colorValue,
     this.bucket,
+    this.targetContainerId,
   });
 
   Map<String, dynamic> toMap() {
@@ -23,6 +29,7 @@ class Category {
       'name': name,
       'colorValue': colorValue,
       'bucket': bucket?.index,
+      'targetContainerId': targetContainerId,
     };
   }
 
@@ -35,6 +42,7 @@ class Category {
       bucket: map['bucket'] != null
           ? BudgetBucket.values[map['bucket'] as int]
           : null,
+      targetContainerId: map['targetContainerId'] as String?,
     );
   }
 
@@ -99,6 +107,7 @@ class CategoriesStore {
     int? colorValue,
     int? color,
     BudgetBucket? bucket,
+    String? targetContainerId,
   }) {
     final resolved = colorValue ?? color ?? Colors.blue.toARGB32();
 
@@ -107,6 +116,7 @@ class CategoriesStore {
       name: name,
       colorValue: resolved,
       bucket: bucket,
+      targetContainerId: targetContainerId,
     );
     _categories.add(category);
     _save();
@@ -121,6 +131,8 @@ class CategoriesStore {
     int? color,
     BudgetBucket? bucket,
     bool clearBucket = false,
+    String? targetContainerId,
+    bool clearTargetContainer = false,
   }) {
     final index =
         _categories.indexWhere((c) => c.id == id);
@@ -136,6 +148,9 @@ class CategoriesStore {
       name: resolvedName.isEmpty ? old.name : resolvedName,
       colorValue: resolvedColor,
       bucket: clearBucket ? null : (bucket ?? old.bucket),
+      targetContainerId: clearTargetContainer
+          ? null
+          : (targetContainerId ?? old.targetContainerId),
     );
     _save();
   }

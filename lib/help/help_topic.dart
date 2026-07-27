@@ -4,6 +4,7 @@
 /// qui ouvre `HelpScreen(topic: HelpTopic.xxx)`.
 enum HelpTopic {
   dashboard,
+  netWorth,
   transactionsList,
   budget,
   fiftyThirtyTwenty,
@@ -15,6 +16,8 @@ enum HelpTopic {
   retirement,
   investment,
   archives,
+  archiveDetail,
+  globalHistory,
   monthRecap,
   comparison,
   settings,
@@ -48,6 +51,21 @@ const Map<HelpTopic, HelpContent> helpContents = {
       'La flèche double (⏭) clôture le mois actif : les opérations pointées '
           'sont archivées, les autres passent au mois suivant sans impacter '
           'le solde.',
+    ],
+  ),
+  HelpTopic.netWorth: HelpContent(
+    title: 'Patrimoine',
+    paragraphs: [
+      'Vue d\'ensemble de tout ce que vous possédez, tous supports '
+          'confondus : comptes, épargne, assurance-vie, retraite et '
+          'investissement.',
+      'Le total est exprimé en euros uniquement. Les actions/ETF cotées '
+          'en dollars sont affichées séparément, jamais additionnées au '
+          'total euro pour éviter un chiffre faux sans conversion de '
+          'change.',
+      'Les valeurs assurance-vie/retraite/épargne sont calculées comme '
+          'sur leurs écrans dédiés. Les cours crypto/actions se '
+          'rafraîchissent avec le bouton en haut à droite.',
     ],
   ),
   HelpTopic.transactionsList: HelpContent(
@@ -215,6 +233,30 @@ const Map<HelpTopic, HelpContent> helpContents = {
           'par catégorie depuis le début.',
       'Le bouton "Comparer" permet de mettre plusieurs périodes côte à '
           'côte (courbes, répartition, tableau).',
+    ],
+  ),
+  HelpTopic.archiveDetail: HelpContent(
+    title: 'Analyse d\'une période archivée',
+    paragraphs: [
+      'Le camembert intérieur répartit les dépenses par catégorie. Tapez '
+          'une part pour voir le détail des transactions de cette '
+          'catégorie ; le bouton "Retour catégories" revient à la vue '
+          'd\'ensemble.',
+      'Le bouton %/€ en haut à droite bascule l\'affichage entre montant '
+          'et pourcentage.',
+      'Ces chiffres sont figés au moment de la clôture du mois : ils ne '
+          'changent plus, contrairement au récap du mois en cours.',
+    ],
+  ),
+  HelpTopic.globalHistory: HelpContent(
+    title: 'Historique global',
+    paragraphs: [
+      'Vue cumulée de tous les mois archivés depuis le début, sans limite '
+          'de période.',
+      'Les icônes en haut affichent ou masquent la courbe d\'évolution et '
+          'le camembert de répartition, indépendamment l\'un de l\'autre.',
+      'Comme sur les autres écrans d\'analyse, tapez une catégorie du '
+          'camembert pour voir son détail.',
     ],
   ),
   HelpTopic.monthRecap: HelpContent(

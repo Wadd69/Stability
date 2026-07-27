@@ -5,6 +5,10 @@ import 'package:stability/core/finance/transaction_type.dart';
 import '../../core/archives/archived_month.dart';
 import '../../core/finance/transaction.dart';
 import '../../core/finance/categories_store.dart';
+import '../../theme/app_colors.dart';
+import '../../help/help_screen.dart';
+import '../../help/help_topic.dart';
+import '../../shared/category_pie_chart.dart';
 
 class YearChartsScreen extends StatefulWidget {
   final int year;
@@ -29,7 +33,7 @@ class _YearChartsScreenState extends State<YearChartsScreen> {
   bool showDonut = false;
 
   // Donut
-  String? focusedCategoryId;
+  PieChartMode pieMode = PieChartMode.expenses;
 
   // Filtre global (donut + accordéon)
   final Set<String?> selectedCategories = {'__ALL__'};
@@ -49,20 +53,6 @@ class _YearChartsScreenState extends State<YearChartsScreen> {
     if (id == null) return Colors.grey;
     final c = CategoriesStore.getById(id);
     return c == null ? Colors.grey : Color(c.colorValue);
-  }
-
-  Color _shade(Color base, double t) {
-    final hsl = HSLColor.fromColor(base);
-    return hsl
-        .withLightness((hsl.lightness - (0.45 * t)).clamp(0.18, 0.85))
-        .toColor();
-  }
-
-  Color _shadeFromAmount(Color base, double amount, double min, double max) {
-    if (max <= min) return _shade(base, 0.85);
-    final normalized = (amount - min) / (max - min);
-    final t = (0.2 + 0.8 * normalized).clamp(0.0, 1.0);
-    return _shade(base, t);
   }
 
   // ─────────────────────────
@@ -122,6 +112,19 @@ class _YearChartsScreenState extends State<YearChartsScreen> {
             onPressed: () => setState(() => asPercentage = !asPercentage),
             tooltip: asPercentage ? 'Afficher en montant' : 'Afficher en %',
           ),
+          IconButton(
+            tooltip: 'Aide',
+            icon: const Icon(Icons.help_outline),
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) =>
+                      const HelpScreen(topic: HelpTopic.archiveDetail),
+                ),
+              );
+            },
+          ),
         ],
       ),
       body: ListView(
@@ -139,7 +142,19 @@ class _YearChartsScreenState extends State<YearChartsScreen> {
             ),
           if (showLineChart) _yearLineChart(), // ← montants uniquement
           if (showLineChart && showDonut) const SizedBox(height: 24),
-          if (showDonut) _sunDonutYear(), // ← % ou €
+          if (showDonut) ...[
+            PieChartModeSelector(
+              value: pieMode,
+              onChanged: (m) => setState(() => pieMode = m),
+            ),
+            const SizedBox(height: 12),
+            CategoryPieChart(
+              transactions: _allTransactions.where((t) => _allowed(t.category)).toList(),
+              mode: pieMode,
+              asPercentage: asPercentage,
+              currencySymbol: _currencySymbol,
+            ),
+          ],
           const SizedBox(height: 24),
           _categoriesAccordion(),
         ],
@@ -153,6 +168,7 @@ class _YearChartsScreenState extends State<YearChartsScreen> {
     required bool selected,
     required VoidCallback onTap,
   }) {
+    final scheme = Theme.of(context).colorScheme;
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 2),
       child: InkWell(
@@ -163,12 +179,16 @@ class _YearChartsScreenState extends State<YearChartsScreen> {
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(10),
             border: Border.all(
-              color: selected ? Colors.white : Colors.white24,
+              color: selected ? scheme.primary : scheme.outlineVariant,
               width: 1,
             ),
-            color: selected ? Colors.white12 : Colors.transparent,
+            color: selected ? scheme.primaryContainer : Colors.transparent,
           ),
-          child: Icon(icon, size: 20),
+          child: Icon(
+            icon,
+            size: 20,
+            color: selected ? scheme.onPrimaryContainer : scheme.onSurface,
+          ),
         ),
       ),
     );
@@ -264,8 +284,13 @@ class _YearChartsScreenState extends State<YearChartsScreen> {
                   show: true,
                   drawVerticalLine: false,
                   horizontalInterval: _niceInterval(safeMaxY),
-                  getDrawingHorizontalLine: (value) =>
-                      FlLine(color: Colors.white10, strokeWidth: 1),
+                  getDrawingHorizontalLine: (value) => FlLine(
+                    color: Theme.of(context)
+                        .colorScheme
+                        .outlineVariant
+                        .withValues(alpha: 0.5),
+                    strokeWidth: 1,
+                  ),
                 ),
                 lineTouchData: LineTouchData(
                   enabled: true,
@@ -349,7 +374,7 @@ class _YearChartsScreenState extends State<YearChartsScreen> {
           'Courbes',
           style: TextStyle(
             fontWeight: FontWeight.w800,
-            color: Colors.white.withValues(alpha: 0.9),
+            color: Theme.of(context).colorScheme.onSurface,
           ),
         ),
         const Spacer(),
@@ -418,6 +443,7 @@ class _YearChartsScreenState extends State<YearChartsScreen> {
     required Color colorDot,
     required VoidCallback onTap,
   }) {
+    final scheme = Theme.of(context).colorScheme;
     return InkWell(
       borderRadius: BorderRadius.circular(999),
       onTap: onTap,
@@ -426,10 +452,10 @@ class _YearChartsScreenState extends State<YearChartsScreen> {
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(999),
           border: Border.all(
-            color: selected ? Colors.white54 : Colors.white12,
+            color: selected ? scheme.primary : scheme.outlineVariant,
             width: 1,
           ),
-          color: selected ? Colors.white10 : Colors.transparent,
+          color: selected ? scheme.primaryContainer : Colors.transparent,
         ),
         child: Row(
           mainAxisSize: MainAxisSize.min,
@@ -448,7 +474,7 @@ class _YearChartsScreenState extends State<YearChartsScreen> {
               style: TextStyle(
                 fontWeight: FontWeight.w700,
                 fontSize: 12,
-                color: selected ? Colors.white : Colors.white70,
+                color: selected ? scheme.onPrimaryContainer : scheme.onSurface,
               ),
             ),
           ],
@@ -484,176 +510,6 @@ class _YearChartsScreenState extends State<YearChartsScreen> {
       isStrokeCapRound: true,
       dotData: const FlDotData(show: false),
       belowBarData: BarAreaData(show: false),
-    );
-  }
-
-  // ─────────────────────────
-  // 🌞 SUN DONUT ANNUEL — % OU €
-  Widget _sunDonutYear() {
-    final expenses = _allTransactions
-        .where((t) =>
-            t.type == TransactionType.expense && _allowed(t.category))
-        .toList();
-
-    if (expenses.isEmpty) {
-      return _card(
-        'Dépenses',
-        const Center(child: Text('Aucune dépense')),
-        220,
-      );
-    }
-
-    final Map<String?, double> categoryTotals = {};
-    for (final t in expenses) {
-      categoryTotals[t.category] =
-          (categoryTotals[t.category] ?? 0) + t.amount;
-    }
-
-    final totalSum = categoryTotals.values.fold(0.0, (a, b) => a + b);
-
-    final categories = categoryTotals.entries.toList()
-      ..sort((a, b) => b.value.compareTo(a.value));
-
-    final details = focusedCategoryId == null
-        ? <Transaction>[]
-        : expenses
-            .where((t) => t.category == focusedCategoryId)
-            .toList()
-          ..sort((a, b) => a.amount.compareTo(b.amount));
-
-    final detailsSum = details.fold(0.0, (a, b) => a + b.amount);
-
-    double minAmount = 0;
-    double maxAmount = 0;
-    if (details.isNotEmpty) {
-      minAmount = details.first.amount;
-      maxAmount = details.last.amount;
-    }
-
-    return _card(
-      focusedCategoryId == null
-          ? 'Dépenses annuelles par catégorie'
-          : 'Dépenses – ${_categoryName(focusedCategoryId)}',
-      Column(
-        children: [
-          if (focusedCategoryId != null)
-            Align(
-              alignment: Alignment.centerLeft,
-              child: TextButton.icon(
-                onPressed: () => setState(() => focusedCategoryId = null),
-                icon: const Icon(Icons.arrow_back),
-                label: const Text('Retour catégories'),
-              ),
-            ),
-          SizedBox(
-            height: 300,
-            child: Stack(
-              alignment: Alignment.center,
-              children: [
-                if (focusedCategoryId != null && details.isNotEmpty)
-                  PieChart(
-                    PieChartData(
-                      startDegreeOffset: -90,
-                      centerSpaceRadius: 85,
-                      sectionsSpace: 2,
-                      sections: details.map((t) {
-                        final ratio =
-                            detailsSum == 0 ? 0 : t.amount / detailsSum;
-                        final showLabel = ratio > 0.06;
-
-                        return PieChartSectionData(
-                          value: t.amount,
-                          radius: 78,
-                          color: _shadeFromAmount(
-                            _baseCategoryColor(focusedCategoryId),
-                            t.amount,
-                            minAmount,
-                            maxAmount,
-                          ),
-                          title: showLabel
-                              ? asPercentage
-                                  ? '${t.label}\n${(ratio * 100).toStringAsFixed(1)}%'
-                                  : '${t.label}\n${t.amount.toStringAsFixed(0)}$_currencySymbol'
-                              : '',
-                          titleStyle: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 9,
-                            fontWeight: FontWeight.w600,
-                            height: 1.2,
-                          ),
-                          titlePositionPercentageOffset: 0.6,
-                        );
-                      }).toList(),
-                    ),
-                  ),
-                PieChart(
-                  PieChartData(
-                    startDegreeOffset: -90,
-                    centerSpaceRadius: 40,
-                    sectionsSpace: 2,
-                    pieTouchData: PieTouchData(
-                      touchCallback: (event, response) {
-                        if (event is FlTapUpEvent &&
-                            response?.touchedSection != null) {
-                          final idx = response!
-                              .touchedSection!.touchedSectionIndex;
-                          if (idx >= 0 && idx < categories.length) {
-                            setState(() {
-                              focusedCategoryId = categories[idx].key;
-                            });
-                          }
-                        }
-                      },
-                    ),
-                    sections: categories.map((e) {
-                      final ratio =
-                          totalSum == 0 ? 0 : e.value / totalSum;
-                      return PieChartSectionData(
-                        value: e.value,
-                        radius: 70,
-                        color:
-                            _shade(_baseCategoryColor(e.key), 0.85),
-                        title: asPercentage
-                            ? '${(ratio * 100).toStringAsFixed(1)}%'
-                            : '${e.value.toStringAsFixed(0)}$_currencySymbol',
-                        titleStyle: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 11,
-                          fontWeight: FontWeight.w700,
-                        ),
-                      );
-                    }).toList(),
-                  ),
-                ),
-                IgnorePointer(
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Text(
-                        focusedCategoryId == null
-                            ? 'Total'
-                            : _categoryName(focusedCategoryId),
-                        style:
-                            const TextStyle(fontWeight: FontWeight.w600),
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        focusedCategoryId == null
-                            ? '${totalSum.toStringAsFixed(0)}$_currencySymbol'
-                            : '${detailsSum.toStringAsFixed(0)}$_currencySymbol',
-                        style: const TextStyle(
-                            fontWeight: FontWeight.w800,
-                            fontSize: 16),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-      440,
     );
   }
 
@@ -697,7 +553,7 @@ class _YearChartsScreenState extends State<YearChartsScreen> {
       trailing: Text(
         '${isIncome ? '+' : '-'}${t.amount.toStringAsFixed(2)}$_currencySymbol',
         style: TextStyle(
-          color: isIncome ? Colors.green : Colors.red,
+          color: isIncome ? context.appColors.positive : context.appColors.negative,
           fontWeight: FontWeight.bold,
         ),
       ),
