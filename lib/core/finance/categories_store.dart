@@ -1,5 +1,7 @@
-import 'package:hive/hive.dart';
 import 'package:flutter/material.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
+
+import '../../accounts/current_account.dart';
 import 'budget_bucket.dart';
 
 class Category {
@@ -23,13 +25,15 @@ class Category {
     this.targetContainerId,
   });
 
+  /// --- Sérialisation Supabase (colonnes en snake_case) ---
+  /// Ne contient pas `account_id` : ajouté par le store à l'insertion.
   Map<String, dynamic> toMap() {
     return {
       'id': id,
       'name': name,
-      'colorValue': colorValue,
+      'color_value': colorValue,
       'bucket': bucket?.index,
-      'targetContainerId': targetContainerId,
+      'target_container_id': targetContainerId,
     };
   }
 
@@ -37,12 +41,12 @@ class Category {
     return Category(
       id: map['id'] as String,
       name: map['name'] as String,
-      colorValue: (map['colorValue'] as int?) ??
+      colorValue: (map['color_value'] as int?) ??
           _defaultColorForLegacy(map['id'] as String),
       bucket: map['bucket'] != null
           ? BudgetBucket.values[map['bucket'] as int]
           : null,
-      targetContainerId: map['targetContainerId'] as String?,
+      targetContainerId: map['target_container_id'] as String?,
     );
   }
 
@@ -66,49 +70,42 @@ class Category {
   ];
 }
 
+/// Catégories du compte cloud actif — stockées sur Supabase (table
+/// `categories`), scopées par `account_id`. Lecture toujours synchrone
+/// (cache en mémoire) ; seules les écritures et [init] font un
+/// aller-retour réseau.
 class CategoriesStore {
-  static const String _boxName = 'categories';
-
-  static late Box _box;
+  static SupabaseClient get _client => Supabase.instance.client;
   static final List<Category> _categories = [];
 
+  /// Recharge les catégories du compte actif depuis Supabase.
   static Future<void> init() async {
-    _box = await Hive.openBox(_boxName);
+    final accountId = CurrentAccount.active.id;
+    if (accountId.isEmpty) {
+      _categories.clear();
+      return;
+    }
 
-    final List stored = _box.get('list', defaultValue: []);
+    final rows =
+        await _client.from('categories').select().eq('account_id', accountId);
 
     _categories
       ..clear()
       ..addAll(
-        stored.cast<Map>().map((e) {
-          return Category.fromMap(
-            Map<String, dynamic>.from(e),
-          );
-        }),
+        (rows as List).map((r) => Category.fromMap(r as Map<String, dynamic>)),
       );
-
-    // 🔹 Sauvegarde post-migration (si anciennes catégories)
-    _save();
   }
 
-  static List<Category> get all =>
-      List.unmodifiable(_categories);
-
-  static void _save() {
-    _box.put(
-      'list',
-      _categories.map((c) => c.toMap()).toList(),
-    );
-  }
+  static List<Category> get all => List.unmodifiable(_categories);
 
   // ✅ Compatible : accepte colorValue: OU color:
-  static void add({
+  static Future<void> add({
     required String name,
     int? colorValue,
     int? color,
     BudgetBucket? bucket,
     String? targetContainerId,
-  }) {
+  }) async {
     final resolved = colorValue ?? color ?? Colors.blue.toARGB32();
 
     final category = Category(
@@ -118,12 +115,17 @@ class CategoriesStore {
       bucket: bucket,
       targetContainerId: targetContainerId,
     );
+
+    await _client.from('categories').insert({
+      ...category.toMap(),
+      'account_id': CurrentAccount.active.id,
+    });
+
     _categories.add(category);
-    _save();
   }
 
   // ✅ Compatible : accepte name: OU newName: + colorValue: OU color:
-  static void update(
+  static Future<void> update(
     String id, {
     String? name,
     String? newName,
@@ -133,9 +135,8 @@ class CategoriesStore {
     bool clearBucket = false,
     String? targetContainerId,
     bool clearTargetContainer = false,
-  }) {
-    final index =
-        _categories.indexWhere((c) => c.id == id);
+  }) async {
+    final index = _categories.indexWhere((c) => c.id == id);
     if (index == -1) return;
 
     final old = _categories[index];
@@ -143,7 +144,7 @@ class CategoriesStore {
     final resolvedName = (name ?? newName ?? old.name).trim();
     final resolvedColor = colorValue ?? color ?? old.colorValue;
 
-    _categories[index] = Category(
+    final updated = Category(
       id: old.id,
       name: resolvedName.isEmpty ? old.name : resolvedName,
       colorValue: resolvedColor,
@@ -152,18 +153,24 @@ class CategoriesStore {
           ? null
           : (targetContainerId ?? old.targetContainerId),
     );
-    _save();
+
+    await _client.from('categories').update(updated.toMap()).eq('id', id);
+
+    _categories[index] = updated;
   }
 
-  static void remove(String id) {
+  static Future<void> remove(String id) async {
+    await _client.from('categories').delete().eq('id', id);
     _categories.removeWhere((c) => c.id == id);
-    _save();
   }
 
   // ✅ (tu en as besoin pour tes resets)
-  static void clear() {
+  static Future<void> clear() async {
+    final accountId = CurrentAccount.active.id;
+    if (accountId.isNotEmpty) {
+      await _client.from('categories').delete().eq('account_id', accountId);
+    }
     _categories.clear();
-    _save();
   }
 
   static Category? getById(String id) {

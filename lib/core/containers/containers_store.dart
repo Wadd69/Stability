@@ -1,28 +1,30 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import 'package:hive/hive.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../../accounts/current_account.dart';
 import 'container_model.dart';
 import 'container_type.dart';
 
+/// Supports ("comptes") du compte cloud actif — stockés sur Supabase
+/// (table `containers`), scopés par `account_id`. La liste en mémoire
+/// reste synchrone pour la lecture (`all`/`active`/...) ; seules les
+/// opérations d'écriture et [init] font un aller-retour réseau.
 class ContainersStore extends ChangeNotifier {
-  static const String _boxName = 'containers_box';
+  static SupabaseClient get _client => Supabase.instance.client;
 
-  late Box _box;
   final List<ContainerModel> _containers = [];
 
   // ─────────────────────────────────────────────
   // GETTERS
   // ─────────────────────────────────────────────
 
-  List<ContainerModel> get all =>
-      List.unmodifiable(_containers);
+  List<ContainerModel> get all => List.unmodifiable(_containers);
 
-  List<ContainerModel> get active =>
-      _containers
-          .where((c) => !c.isArchived)
-          .toList()
-        ..sort((a, b) => a.order.compareTo(b.order));
+  List<ContainerModel> get active => _containers
+      .where((c) => !c.isArchived)
+      .toList()
+    ..sort((a, b) => a.order.compareTo(b.order));
 
   List<ContainerModel> get archived =>
       _containers.where((c) => c.isArchived).toList();
@@ -45,20 +47,26 @@ class ContainersStore extends ChangeNotifier {
   // INIT
   // ─────────────────────────────────────────────
 
+  /// Recharge les supports du compte actif depuis Supabase. À appeler
+  /// après connexion et à chaque changement de compte actif — ne dépend
+  /// plus du lancement de l'app puisque les données sont scopées par
+  /// compte, connu seulement après authentification.
   Future<void> init() async {
-    _box = await Hive.openBox(_boxName);
-    _loadFromBox();
-  }
+    final accountId = CurrentAccount.active.id;
+    if (accountId.isEmpty) {
+      _containers.clear();
+      notifyListeners();
+      return;
+    }
 
-  void _loadFromBox() {
+    final rows =
+        await _client.from('containers').select().eq('account_id', accountId);
+
     _containers
       ..clear()
       ..addAll(
-        _box.values.map(
-          (e) => ContainerModel.fromMap(
-            Map<dynamic, dynamic>.from(e),
-          ),
-        ),
+        (rows as List)
+            .map((r) => ContainerModel.fromMap(r as Map<String, dynamic>)),
       );
 
     notifyListeners();
@@ -68,12 +76,12 @@ class ContainersStore extends ChangeNotifier {
   // CRUD
   // ─────────────────────────────────────────────
 
-  ContainerModel createContainer({
+  Future<ContainerModel> createContainer({
     required String name,
     required int colorValue,
     required ContainerType type,
     List<InterestRatePeriod>? interestRates,
-  }) {
+  }) async {
     final container = ContainerModel(
       id: UniqueKey().toString(),
       name: name,
@@ -84,48 +92,58 @@ class ContainersStore extends ChangeNotifier {
       order: _containers.length,
     );
 
+    await _client.from('containers').insert({
+      ...container.toMap(),
+      'account_id': CurrentAccount.active.id,
+    });
+
     _containers.add(container);
-    _persist(container);
     notifyListeners();
     return container;
   }
 
-  void updateContainer(ContainerModel updated) {
+  Future<void> updateContainer(ContainerModel updated) async {
     final index = _containers.indexWhere((c) => c.id == updated.id);
     if (index == -1) return;
 
+    await _client
+        .from('containers')
+        .update(updated.toMap())
+        .eq('id', updated.id);
+
     _containers[index] = updated;
-    _persist(updated);
     notifyListeners();
   }
 
   /// 🔹 Définit le compte courant principal
   /// - Un seul possible
-  /// - Désactive automatiquement l’ancien
-  void setPrimaryCurrentAccount(String containerId) {
+  /// - Désactive automatiquement l'ancien
+  Future<void> setPrimaryCurrentAccount(String containerId) async {
     final index = _containers.indexWhere((c) => c.id == containerId);
     if (index == -1) return;
 
     final target = _containers[index];
+    if (target.type != ContainerType.currentAccount) return;
 
-    if (target.type != ContainerType.currentAccount) {
-      return;
-    }
-
-    // Désactiver l’ancien principal
+    // Désactiver l'ancien principal
     for (int i = 0; i < _containers.length; i++) {
       final c = _containers[i];
       if (c.isPrimary && c.id != target.id) {
-        _containers[i] = c.copyWith(isPrimary: false);
-        _persist(_containers[i]);
+        final updated = c.copyWith(isPrimary: false);
+        await _client
+            .from('containers')
+            .update({'is_primary': false}).eq('id', updated.id);
+        _containers[i] = updated;
       }
     }
 
     // Activer le nouveau
     if (!target.isPrimary) {
       final updated = target.copyWith(isPrimary: true);
+      await _client
+          .from('containers')
+          .update({'is_primary': true}).eq('id', updated.id);
       _containers[index] = updated;
-      _persist(updated);
     }
 
     notifyListeners();
@@ -134,28 +152,29 @@ class ContainersStore extends ChangeNotifier {
   /// Suppression logique :
   /// - hard delete si déjà archivé
   /// - sinon archivage
-  void deleteContainer(String id) {
+  Future<void> deleteContainer(String id) async {
     final index = _containers.indexWhere((c) => c.id == id);
     if (index == -1) return;
 
     final container = _containers[index];
 
     if (container.isArchived) {
+      await _client.from('containers').delete().eq('id', id);
       _containers.removeAt(index);
-      _box.delete(container.id);
     } else {
       final archived = container.copyWith(isArchived: true);
+      await _client
+          .from('containers')
+          .update({'is_archived': true}).eq('id', id);
       _containers[index] = archived;
-      _persist(archived);
     }
 
     notifyListeners();
   }
 
-  void reorderContainers(int oldIndex, int newIndex) {
+  Future<void> reorderContainers(int oldIndex, int newIndex) async {
     if (oldIndex < 0 || newIndex < 0) return;
-    if (oldIndex >= _containers.length ||
-        newIndex >= _containers.length) {
+    if (oldIndex >= _containers.length || newIndex >= _containers.length) {
       return;
     }
 
@@ -164,7 +183,9 @@ class ContainersStore extends ChangeNotifier {
 
     for (int i = 0; i < _containers.length; i++) {
       _containers[i] = _containers[i].copyWith(order: i);
-      _persist(_containers[i]);
+      await _client
+          .from('containers')
+          .update({'sort_order': i}).eq('id', _containers[i].id);
     }
 
     notifyListeners();
@@ -174,17 +195,12 @@ class ContainersStore extends ChangeNotifier {
   // RESET TOTAL
   // ─────────────────────────────────────────────
 
-  void clearAll() {
+  Future<void> clearAll() async {
+    final accountId = CurrentAccount.active.id;
+    if (accountId.isNotEmpty) {
+      await _client.from('containers').delete().eq('account_id', accountId);
+    }
     _containers.clear();
-    _box.clear();
     notifyListeners();
-  }
-
-  // ─────────────────────────────────────────────
-  // PERSISTENCE
-  // ─────────────────────────────────────────────
-
-  void _persist(ContainerModel container) {
-    _box.put(container.id, container.toMap());
   }
 }

@@ -15,14 +15,14 @@ import 'dashboard/dashboard_screen.dart';
 
 import 'core/finance/transactions_store.dart';
 import 'core/finance/categories_store.dart';
-import 'core/budget_rules/budget_rules_store.dart';
 import 'core/archives/archives_store.dart';
 import 'core/containers/containers_store.dart';
 import 'core/finance/active_month_store.dart';
-import 'core/finance/monthly_balances_store.dart'; // ✅ AJOUT
+import 'core/finance/monthly_balances_store.dart';
 import 'core/budget_rules/category_allocations_store.dart';
 import 'core/budget_rules/category_goals_store.dart';
 import 'core/finance/recurring_transactions_store.dart';
+import 'core/containers/interest_adjustments_store.dart';
 import 'settings/app_settings_store.dart';
 import 'accounts/current_account.dart';
 import 'accounts/create_account_screen.dart';
@@ -33,26 +33,16 @@ void main() async {
 
   await Hive.initFlutter();
 
-  // 🔹 Stores init
-  await TransactionsStore.init();
-  await CategoriesStore.init();
-  await BudgetRulesStore.init();
-  await ArchivesStore.init();
-  await ActiveMonthStore.init();
-  await MonthlyBalancesStore.init(); // ✅ INDISPENSABLE
-  await CategoryAllocationsStore.init();
-  await CategoryGoalsStore.init();
-  await RecurringTransactionsStore.init();
+  // 🔹 Préférences locales de cet appareil — les données financières ne
+  // sont plus initialisées ici : elles vivent sur Supabase et dépendent
+  // du compte actif, connu seulement après authentification (voir
+  // AppRootState._load ci-dessous).
   await AppSettingsStore.init();
 
   await Supabase.initialize(
     url: SupabaseConfig.url,
     publishableKey: SupabaseConfig.anonKey,
   );
-
-  // Rattrape les récurrences dues pour le mois actif (premier lancement,
-  // ou nouveau gabarit créé alors que le mois était déjà en cours).
-  RecurringTransactionsStore.generateDueForMonth(ActiveMonthStore.current);
 
   runApp(const StabilityApp());
 }
@@ -64,9 +54,7 @@ class StabilityApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MultiProvider(
       providers: [
-        ChangeNotifierProvider(
-          create: (_) => ContainersStore()..init(),
-        ),
+        ChangeNotifierProvider(create: (_) => ContainersStore()),
       ],
       child: MaterialApp(
         title: 'Stability',
@@ -77,6 +65,30 @@ class StabilityApp extends StatelessWidget {
       ),
     );
   }
+}
+
+/// Charge toutes les données financières du compte actif depuis Supabase —
+/// à appeler après connexion et à chaque changement de compte actif (voir
+/// AppRootState._load et DashboardScreen, au retour de AccountSelectorScreen
+/// et CreateAccountScreen).
+Future<void> loadAccountData(BuildContext context) async {
+  await context.read<ContainersStore>().init();
+  await CategoriesStore.init();
+  await TransactionsStore.init();
+  await ArchivesStore.init();
+  await ActiveMonthStore.init();
+  await MonthlyBalancesStore.init();
+  await CategoryAllocationsStore.init();
+  await CategoryGoalsStore.init();
+  await RecurringTransactionsStore.init();
+  await InterestAdjustmentsStore.init();
+
+  // Rattrape les récurrences dues pour le mois actif (premier lancement
+  // sur ce compte, ou nouveau gabarit créé alors que le mois était déjà
+  // en cours).
+  await RecurringTransactionsStore.generateDueForMonth(
+    ActiveMonthStore.current,
+  );
 }
 
 /// Affiche l'écran de lancement animé une fois au démarrage, puis laisse
@@ -138,6 +150,11 @@ class AppRootState extends State<AppRoot> {
     try {
       final accounts = await CloudAccountsRepository.fetchMyAccounts();
       await CurrentAccount.restoreFromSettings(accounts);
+
+      if (CurrentAccount.hasActive && mounted) {
+        await loadAccountData(context);
+      }
+
       if (!mounted) return;
       setState(() {
         _accounts = accounts;

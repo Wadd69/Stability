@@ -35,7 +35,7 @@ class _MonthArchiveScreenState extends State<MonthArchiveScreen> {
   // ─────────────────────────
   @override
   Widget build(BuildContext context) {
-    final tx = widget.month.transactions;
+    final tx = TransactionsStore.archivedForMonth(widget.month.id);
 
     return Scaffold(
       appBar: AppBar(

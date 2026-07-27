@@ -9,29 +9,18 @@ import 'package:stability/main.dart';
 import 'package:stability/accounts/auth_screen.dart';
 import 'package:stability/onboarding/welcome_screen.dart';
 import 'package:stability/backend/supabase_config.dart';
-import 'package:stability/core/finance/transactions_store.dart';
-import 'package:stability/core/finance/categories_store.dart';
-import 'package:stability/core/budget_rules/budget_rules_store.dart';
-import 'package:stability/core/archives/archives_store.dart';
-import 'package:stability/core/finance/active_month_store.dart';
-import 'package:stability/core/finance/monthly_balances_store.dart';
-import 'package:stability/core/budget_rules/category_allocations_store.dart';
 import 'package:stability/settings/app_settings_store.dart';
 
 void main() {
   late Directory tempDir;
 
   setUpAll(() async {
+    // Les données financières (transactions, catégories, supports...)
+    // vivent désormais sur Supabase, scopées par compte actif — il n'y a
+    // plus de store local à initialiser avant authentification. Seule
+    // AppSettingsStore (préférences de cet appareil) reste locale (Hive).
     tempDir = Directory.systemTemp.createTempSync('stability_test');
     Hive.init(tempDir.path);
-
-    await TransactionsStore.init();
-    await CategoriesStore.init();
-    await BudgetRulesStore.init();
-    await ArchivesStore.init();
-    await ActiveMonthStore.init();
-    await MonthlyBalancesStore.init();
-    await CategoryAllocationsStore.init();
     await AppSettingsStore.init();
 
     SharedPreferences.setMockInitialValues({});

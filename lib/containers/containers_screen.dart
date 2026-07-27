@@ -127,7 +127,7 @@ class _ContainerTile extends StatelessWidget {
             );
 
             if (confirm == true) {
-              store.deleteContainer(container.id);
+              await store.deleteContainer(container.id);
             }
           }
         },

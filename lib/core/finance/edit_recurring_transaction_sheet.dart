@@ -75,7 +75,7 @@ class _EditRecurringTransactionSheetState
     }
   }
 
-  void _save() {
+  Future<void> _save() async {
     if (!_formKey.currentState!.validate()) return;
 
     final amount = double.parse(_amountController.text.replaceAll(',', '.'));
@@ -84,7 +84,7 @@ class _EditRecurringTransactionSheetState
         '${_startDate.year}-${_startDate.month.toString().padLeft(2, '0')}';
 
     if (widget.existing == null) {
-      RecurringTransactionsStore.add(
+      await RecurringTransactionsStore.add(
         RecurringTransaction(
           id: DateTime.now().millisecondsSinceEpoch.toString(),
           label: label,
@@ -98,7 +98,7 @@ class _EditRecurringTransactionSheetState
         ),
       );
     } else {
-      RecurringTransactionsStore.update(
+      await RecurringTransactionsStore.update(
         widget.existing!.copyWith(
           label: label,
           amount: amount,
@@ -112,6 +112,7 @@ class _EditRecurringTransactionSheetState
       );
     }
 
+    if (!mounted) return;
     Navigator.pop(context);
   }
 

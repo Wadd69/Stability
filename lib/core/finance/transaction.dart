@@ -80,6 +80,8 @@ class Transaction {
     );
   }
 
+  /// --- Sérialisation Supabase (colonnes en snake_case) ---
+  /// Ne contient pas `account_id` : ajouté par le store à l'insertion.
   Map<String, dynamic> toMap() {
     return {
       'id': id,
@@ -88,15 +90,15 @@ class Transaction {
       'date': date.toIso8601String(),
       'type': type.name,
       'category': category,
-      'containerId': containerId,
-      'transferId': transferId,
-      'splitGroupId': splitGroupId,
-      'isInterest': isInterest,
-      'isCleared': isCleared,
-      'isArchived': isArchived,
-      'isCarryOver': isCarryOver,
-      'monthKey': monthKey,
-      'originMonthKey': originMonthKey, // ✅
+      'container_id': containerId,
+      'transfer_id': transferId,
+      'split_group_id': splitGroupId,
+      'is_interest': isInterest,
+      'is_cleared': isCleared,
+      'is_archived': isArchived,
+      'is_carry_over': isCarryOver,
+      'month_key': monthKey,
+      'origin_month_key': originMonthKey,
     };
   }
 
@@ -108,15 +110,15 @@ class Transaction {
       date: DateTime.parse(map['date'] as String),
       type: TransactionType.values.firstWhere((e) => e.name == map['type']),
       category: map['category'] as String?,
-      containerId: map['containerId'] as String?,
-      transferId: map['transferId'] as String?,
-      splitGroupId: map['splitGroupId'] as String?,
-      isInterest: (map['isInterest'] as bool?) ?? false,
-      isCleared: (map['isCleared'] as bool?) ?? false,
-      isArchived: (map['isArchived'] as bool?) ?? false,
-      isCarryOver: (map['isCarryOver'] as bool?) ?? false,
-      monthKey: map['monthKey'] as String,
-      originMonthKey: map['originMonthKey'] as String?, // ✅
+      containerId: map['container_id'] as String?,
+      transferId: map['transfer_id'] as String?,
+      splitGroupId: map['split_group_id'] as String?,
+      isInterest: (map['is_interest'] as bool?) ?? false,
+      isCleared: (map['is_cleared'] as bool?) ?? false,
+      isArchived: (map['is_archived'] as bool?) ?? false,
+      isCarryOver: (map['is_carry_over'] as bool?) ?? false,
+      monthKey: map['month_key'] as String,
+      originMonthKey: map['origin_month_key'] as String?,
     );
   }
 }

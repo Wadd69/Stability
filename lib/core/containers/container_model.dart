@@ -211,33 +211,34 @@ class ContainerModel {
     );
   }
 
-  /// --- Hive serialization ---
+  /// --- Sérialisation Supabase (colonnes en snake_case) ---
+  /// Ne contient volontairement pas `account_id` : c'est le store
+  /// (ContainersStore) qui l'ajoute au moment de l'insertion, à partir du
+  /// compte actif — le modèle lui-même reste indépendant du compte.
   Map<String, dynamic> toMap() {
     return {
       'id': id,
       'name': name,
-      'colorValue': colorValue,
+      'color_value': colorValue,
       'type': type.index,
-      'isPrimary': isPrimary,
-      'interestRates': interestRates.map((e) => e.toMap()).toList(),
+      'is_primary': isPrimary,
+      'interest_rates': interestRates.map((e) => e.toMap()).toList(),
 
       // Assurance-vie
-      'insuranceOpenedAt':
-          insuranceOpenedAt?.toIso8601String(),
-      'insuranceAnnualRate': insuranceAnnualRate,
-      'insuranceInterestMode':
-          insuranceInterestMode?.index,
-      'insuranceCalculatedValue': insuranceCalculatedValue,
-      'insuranceCorrectedValue': insuranceCorrectedValue,
+      'insurance_opened_at': insuranceOpenedAt?.toIso8601String(),
+      'insurance_annual_rate': insuranceAnnualRate,
+      'insurance_interest_mode': insuranceInterestMode?.index,
+      'insurance_calculated_value': insuranceCalculatedValue,
+      'insurance_corrected_value': insuranceCorrectedValue,
 
-      'retirementUnlockDate': retirementUnlockDate?.toIso8601String(),
+      'retirement_unlock_date': retirementUnlockDate?.toIso8601String(),
 
-      'cryptoHoldings': cryptoHoldings.map((e) => e.toMap()).toList(),
-      'stockHoldings': stockHoldings.map((e) => e.toMap()).toList(),
+      'crypto_holdings': cryptoHoldings.map((e) => e.toMap()).toList(),
+      'stock_holdings': stockHoldings.map((e) => e.toMap()).toList(),
 
-      'createdAt': createdAt.toIso8601String(),
-      'isArchived': isArchived,
-      'order': order,
+      'created_at': createdAt.toIso8601String(),
+      'is_archived': isArchived,
+      'sort_order': order,
     };
   }
 
@@ -245,10 +246,10 @@ class ContainerModel {
     return ContainerModel(
       id: map['id'] as String,
       name: map['name'] as String,
-      colorValue: map['colorValue'] as int,
+      colorValue: map['color_value'] as int,
       type: ContainerType.values[map['type'] as int],
-      isPrimary: map['isPrimary'] as bool? ?? false,
-      interestRates: (map['interestRates'] as List<dynamic>?)
+      isPrimary: map['is_primary'] as bool? ?? false,
+      interestRates: (map['interest_rates'] as List<dynamic>?)
               ?.map(
                 (e) => InterestRatePeriod.fromMap(
                   Map<String, dynamic>.from(e),
@@ -258,48 +259,41 @@ class ContainerModel {
           [],
 
       // Assurance-vie
-      insuranceOpenedAt:
-          map['insuranceOpenedAt'] != null
-              ? DateTime.parse(
-                  map['insuranceOpenedAt'] as String,
-                )
-              : null,
+      insuranceOpenedAt: map['insurance_opened_at'] != null
+          ? DateTime.parse(map['insurance_opened_at'] as String)
+          : null,
       insuranceAnnualRate:
-          (map['insuranceAnnualRate'] as num?)?.toDouble(),
-      insuranceInterestMode:
-          map['insuranceInterestMode'] != null
-              ? InsuranceInterestMode
-                  .values[map['insuranceInterestMode'] as int]
-              : null,
+          (map['insurance_annual_rate'] as num?)?.toDouble(),
+      insuranceInterestMode: map['insurance_interest_mode'] != null
+          ? InsuranceInterestMode
+              .values[map['insurance_interest_mode'] as int]
+          : null,
       insuranceCalculatedValue:
-          (map['insuranceCalculatedValue'] as num?)
-              ?.toDouble(),
+          (map['insurance_calculated_value'] as num?)?.toDouble(),
       insuranceCorrectedValue:
-          (map['insuranceCorrectedValue'] as num?)
-              ?.toDouble(),
+          (map['insurance_corrected_value'] as num?)?.toDouble(),
 
-      retirementUnlockDate:
-          map['retirementUnlockDate'] != null
-              ? DateTime.parse(map['retirementUnlockDate'] as String)
-              : null,
+      retirementUnlockDate: map['retirement_unlock_date'] != null
+          ? DateTime.parse(map['retirement_unlock_date'] as String)
+          : null,
 
-      cryptoHoldings: (map['cryptoHoldings'] as List<dynamic>?)
+      cryptoHoldings: (map['crypto_holdings'] as List<dynamic>?)
               ?.map((e) => CryptoHolding.fromMap(
                     Map<String, dynamic>.from(e),
                   ))
               .toList() ??
           [],
 
-      stockHoldings: (map['stockHoldings'] as List<dynamic>?)
+      stockHoldings: (map['stock_holdings'] as List<dynamic>?)
               ?.map((e) => StockHolding.fromMap(
                     Map<String, dynamic>.from(e),
                   ))
               .toList() ??
           [],
 
-      createdAt: DateTime.parse(map['createdAt'] as String),
-      isArchived: map['isArchived'] as bool? ?? false,
-      order: map['order'] as int? ?? 0,
+      createdAt: DateTime.parse(map['created_at'] as String),
+      isArchived: map['is_archived'] as bool? ?? false,
+      order: map['sort_order'] as int? ?? 0,
     );
   }
 }

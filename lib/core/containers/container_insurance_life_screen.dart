@@ -370,7 +370,7 @@ class _ContainerInsuranceLifeScreenState
     setState(() {});
   }
 
-  void _save() {
+  Future<void> _save() async {
     final updated = widget.container.copyWith(
       insuranceOpenedAt: _openedAt,
       insuranceAnnualRate: _annualRate,
@@ -379,7 +379,8 @@ class _ContainerInsuranceLifeScreenState
       insuranceCalculatedValue: null,
     );
 
-    context.read<ContainersStore>().updateContainer(updated);
+    await context.read<ContainersStore>().updateContainer(updated);
+    if (!mounted) return;
     Navigator.pop(context);
   }
 }

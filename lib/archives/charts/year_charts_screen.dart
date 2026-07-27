@@ -4,6 +4,7 @@ import 'package:stability/core/finance/transaction_type.dart';
 
 import '../../core/archives/archived_month.dart';
 import '../../core/finance/transaction.dart';
+import '../../core/finance/transactions_store.dart';
 import '../../core/finance/categories_store.dart';
 import '../../theme/app_colors.dart';
 import '../../help/help_screen.dart';
@@ -58,7 +59,9 @@ class _YearChartsScreenState extends State<YearChartsScreen> {
   // ─────────────────────────
   List<Transaction> get _allTransactions {
     return widget.months
-        .expand<Transaction>((ArchivedMonth m) => m.transactions)
+        .expand<Transaction>(
+          (ArchivedMonth m) => TransactionsStore.archivedForMonth(m.id),
+        )
         .toList();
   }
 
@@ -210,7 +213,7 @@ class _YearChartsScreenState extends State<YearChartsScreen> {
       final m = widget.months[i];
       final mi = _monthIndex(m, i);
 
-      for (final t in m.transactions) {
+      for (final t in TransactionsStore.archivedForMonth(m.id)) {
         perCategory.putIfAbsent(t.category, () => List<double>.filled(12, 0));
         perCategory[t.category]![mi] += t.amount;
 

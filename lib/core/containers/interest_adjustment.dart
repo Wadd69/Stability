@@ -53,28 +53,25 @@ class InterestAdjustment {
   // HIVE SERIALIZATION
   // ─────────────────────────────────────────────
 
+  /// --- Sérialisation Supabase (colonnes en snake_case) ---
   Map<String, dynamic> toMap() {
     return {
-      'containerId': containerId,
-      'quinzaineDate': quinzaineDate.toIso8601String(),
-      'computedInterest': computedInterest,
-      'correctedInterest': correctedInterest,
-      'validatedAt': validatedAt.toIso8601String(),
+      'container_id': containerId,
+      'quinzaine_date': quinzaineDate.toIso8601String(),
+      'computed_interest': computedInterest,
+      'corrected_interest': correctedInterest,
+      'validated_at': validatedAt.toIso8601String(),
       'applied': applied,
     };
   }
 
   factory InterestAdjustment.fromMap(Map<String, dynamic> map) {
     return InterestAdjustment(
-      containerId: map['containerId'] as String,
-      quinzaineDate:
-          DateTime.parse(map['quinzaineDate'] as String),
-      computedInterest:
-          (map['computedInterest'] as num).toDouble(),
-      correctedInterest:
-          (map['correctedInterest'] as num).toDouble(),
-      validatedAt:
-          DateTime.parse(map['validatedAt'] as String),
+      containerId: map['container_id'] as String,
+      quinzaineDate: DateTime.parse(map['quinzaine_date'] as String),
+      computedInterest: (map['computed_interest'] as num).toDouble(),
+      correctedInterest: (map['corrected_interest'] as num).toDouble(),
+      validatedAt: DateTime.parse(map['validated_at'] as String),
       applied: map['applied'] as bool? ?? false,
     );
   }

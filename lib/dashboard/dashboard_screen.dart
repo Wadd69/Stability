@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 import 'package:stability/core/finance/transaction_type.dart';
 import '../core/finance/transaction.dart';
 import '../backend/realtime_account_events_service.dart';
+import '../main.dart' show loadAccountData;
 
 import '../accounts/current_account.dart';
 import '../accounts/account_selector_screen.dart';
@@ -289,34 +290,42 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 ],
               ),
             ),
-            destinationTile(
-              icon: Icons.insights,
-              label: 'Patrimoine',
-              screenBuilder: () => const NetWorthScreen(),
+            // Expanded + ListView plutôt que Column + Spacer : le contenu
+            // défile au lieu de déborder sur les écrans courts (paysage,
+            // multi-fenêtre, texte agrandi).
+            Expanded(
+              child: ListView(
+                children: [
+                  destinationTile(
+                    icon: Icons.insights,
+                    label: 'Patrimoine',
+                    screenBuilder: () => const NetWorthScreen(),
+                  ),
+                  destinationTile(
+                    icon: Icons.receipt_long,
+                    label: 'Transactions',
+                    screenBuilder: () => const TransactionsListScreen(),
+                    refreshOnReturn: true,
+                  ),
+                  destinationTile(
+                    icon: Icons.archive,
+                    label: 'Archives',
+                    screenBuilder: () => ArchivesScreen(),
+                  ),
+                  destinationTile(
+                    icon: Icons.event_repeat,
+                    label: 'Transactions récurrentes',
+                    screenBuilder: () => const RecurringTransactionsScreen(),
+                    refreshOnReturn: true,
+                  ),
+                  destinationTile(
+                    icon: Icons.settings,
+                    label: 'Réglages',
+                    screenBuilder: () => const SettingsScreen(),
+                  ),
+                ],
+              ),
             ),
-            destinationTile(
-              icon: Icons.receipt_long,
-              label: 'Transactions',
-              screenBuilder: () => const TransactionsListScreen(),
-              refreshOnReturn: true,
-            ),
-            destinationTile(
-              icon: Icons.archive,
-              label: 'Archives',
-              screenBuilder: () => ArchivesScreen(),
-            ),
-            destinationTile(
-              icon: Icons.event_repeat,
-              label: 'Transactions récurrentes',
-              screenBuilder: () => const RecurringTransactionsScreen(),
-              refreshOnReturn: true,
-            ),
-            destinationTile(
-              icon: Icons.settings,
-              label: 'Réglages',
-              screenBuilder: () => const SettingsScreen(),
-            ),
-            const Spacer(),
           ],
         ),
       ),
@@ -434,7 +443,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
     if (ok != true) return;
     if (!mounted) return;
 
-    final count = BudgetAutomationService.validateTransfers(monthKey);
+    final count = await BudgetAutomationService.validateTransfers(monthKey);
     setState(() {});
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
@@ -493,25 +502,26 @@ class _DashboardScreenState extends State<DashboardScreen> {
       final isCurrentAccount = currentAccountIds.contains(cid);
 
       if (!isCurrentAccount && !t.isCleared) {
-        TransactionsStore.toggleCleared(t.id);
+        await TransactionsStore.toggleCleared(t.id);
       }
     }
     // ─────────────────────────────────────────
 
-    TransactionsStore.closeMonth(
+    await TransactionsStore.closeMonth(
       monthKey: currentKey,
       nextMonthKey: nextKey,
     );
 
-    CategoryAllocationsStore.closeMonth(
+    await CategoryAllocationsStore.closeMonth(
       monthKey: currentKey,
       nextMonthKey: nextKey,
       categoryIds: CategoriesStore.all.map((c) => c.id).toList(),
     );
 
-    ActiveMonthStore.set(nextKey);
-    RecurringTransactionsStore.generateDueForMonth(nextKey);
+    await ActiveMonthStore.set(nextKey);
+    await RecurringTransactionsStore.generateDueForMonth(nextKey);
 
+    if (!mounted) return;
     setState(() {});
   }
 
@@ -561,6 +571,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   builder: (_) => const AccountSelectorScreen(),
                 ),
               );
+              if (!mounted) return;
+              await loadAccountData(context);
+              if (!mounted) return;
               _syncRealtimeSubscription();
               setState(() {});
             },
@@ -583,6 +596,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
           height: 56,
           child: Row(
             mainAxisAlignment: MainAxisAlignment.spaceAround,
+            // Chaque icône est enveloppée dans un Expanded : sur un écran de
+            // téléphone étroit, elles se compressent plutôt que de déborder
+            // horizontalement (5 à 7 icônes selon le mode de gestion).
             children: [
               IconButton(
                 tooltip: 'Supports',
@@ -637,7 +653,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 icon: const Icon(Icons.double_arrow),
                 onPressed: _confirmCloseMonth,
               ),
-            ],
+            ].map((icon) => Expanded(child: icon)).toList(),
           ),
         ),
       ),
@@ -696,8 +712,9 @@ class _DashboardContainersAndTransactions extends StatefulWidget {
 
 class _DashboardContainersAndTransactionsState
     extends State<_DashboardContainersAndTransactions> {
-  void _toggleCleared(Transaction t) {
-    TransactionsStore.toggleCleared(t.id);
+  Future<void> _toggleCleared(Transaction t) async {
+    await TransactionsStore.toggleCleared(t.id);
+    if (!mounted) return;
     setState(() {});
     widget.onChanged();
   }
@@ -708,12 +725,14 @@ class _DashboardContainersAndTransactionsState
       isScrollControlled: true,
       builder: (_) => AddTransactionSheet(type: t.type, existing: t),
     );
+    if (!mounted) return;
     setState(() {});
     widget.onChanged();
   }
 
   Future<void> _deleteTransaction(Transaction t) async {
-    TransactionsStore.remove(t.id);
+    await TransactionsStore.remove(t.id);
+    if (!mounted) return;
     setState(() {});
     widget.onChanged();
   }

@@ -1,74 +1,128 @@
-import 'package:hive/hive.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
+import 'package:stability/accounts/current_account.dart';
 import 'package:stability/core/finance/transactions_store.dart';
 import 'package:stability/core/finance/transaction_type.dart';
 
-/// Stocke les allocations (enveloppes) du budget base zéro :
-/// - le montant alloué par catégorie et par mois
-/// - le report ("carry-in") venant du solde restant du mois précédent
-/// - le revenu prévisionnel saisi manuellement par mois
+/// Allocations (enveloppes) du budget base zéro : le montant alloué par
+/// catégorie et par mois, le report ("carry-in") venant du solde restant
+/// du mois précédent, et le revenu prévisionnel saisi manuellement par
+/// mois. Stockées sur Supabase (tables `category_allocations` et
+/// `planned_income`), scopées par compte.
 ///
 /// Le "dépensé" n'est jamais stocké ici : il est recalculé à la volée
 /// depuis TransactionsStore, comme le fait déjà MonthlyBalancesStore
 /// pour les soldes de conteneurs.
 class CategoryAllocationsStore {
-  static const String _boxName = 'category_allocations';
-  static late Box _box;
+  static SupabaseClient get _client => Supabase.instance.client;
 
+  static final Map<String, double> _allocations = {};
+  static final Map<String, double> _carryIns = {};
+  static final Map<String, double> _plannedIncomes = {};
+
+  static String _key(String monthKey, String categoryId) =>
+      '$monthKey::$categoryId';
+
+  // ─────────────────────────────────────────────
+  // INIT
+  // ─────────────────────────────────────────────
   static Future<void> init() async {
-    _box = Hive.isBoxOpen(_boxName)
-        ? Hive.box(_boxName)
-        : await Hive.openBox(_boxName);
+    _allocations.clear();
+    _carryIns.clear();
+    _plannedIncomes.clear();
+
+    final accountId = CurrentAccount.active.id;
+    if (accountId.isEmpty) return;
+
+    final allocRows = await _client
+        .from('category_allocations')
+        .select()
+        .eq('account_id', accountId);
+
+    for (final r in (allocRows as List)) {
+      final row = r as Map<String, dynamic>;
+      final key = _key(row['month_key'] as String, row['category_id'] as String);
+      _allocations[key] = (row['allocated'] as num).toDouble();
+      _carryIns[key] = (row['carry_in'] as num).toDouble();
+    }
+
+    final incomeRows =
+        await _client.from('planned_income').select().eq('account_id', accountId);
+
+    for (final r in (incomeRows as List)) {
+      final row = r as Map<String, dynamic>;
+      _plannedIncomes[row['month_key'] as String] = (row['amount'] as num).toDouble();
+    }
   }
-
-  // ─────────────────────────────────────────────
-  // CLÉS INTERNES
-  // ─────────────────────────────────────────────
-  static String _allocKey(String monthKey, String categoryId) =>
-      'alloc::$monthKey::$categoryId';
-
-  static String _carryKey(String monthKey, String categoryId) =>
-      'carry::$monthKey::$categoryId';
-
-  static String _incomeKey(String monthKey) => 'income::$monthKey';
 
   // ─────────────────────────────────────────────
   // ALLOCATION MANUELLE DU MOIS
   // ─────────────────────────────────────────────
   static double getAllocated(String monthKey, String categoryId) {
-    if (!_box.isOpen) return 0.0;
-    return (_box.get(_allocKey(monthKey, categoryId)) ?? 0.0).toDouble();
+    return _allocations[_key(monthKey, categoryId)] ?? 0.0;
   }
 
-  static void setAllocated(String monthKey, String categoryId, double value) {
-    if (!_box.isOpen) return;
-    _box.put(_allocKey(monthKey, categoryId), value);
+  static Future<void> setAllocated(
+    String monthKey,
+    String categoryId,
+    double value,
+  ) async {
+    _allocations[_key(monthKey, categoryId)] = value;
+
+    final accountId = CurrentAccount.active.id;
+    if (accountId.isEmpty) return;
+
+    await _client.from('category_allocations').upsert({
+      'account_id': accountId,
+      'month_key': monthKey,
+      'category_id': categoryId,
+      'allocated': value,
+    });
   }
 
   // ─────────────────────────────────────────────
   // REPORT DU MOIS PRÉCÉDENT (écrit uniquement à la clôture)
   // ─────────────────────────────────────────────
   static double getCarryIn(String monthKey, String categoryId) {
-    if (!_box.isOpen) return 0.0;
-    return (_box.get(_carryKey(monthKey, categoryId)) ?? 0.0).toDouble();
+    return _carryIns[_key(monthKey, categoryId)] ?? 0.0;
   }
 
-  static void _setCarryIn(String monthKey, String categoryId, double value) {
-    if (!_box.isOpen) return;
-    _box.put(_carryKey(monthKey, categoryId), value);
+  static Future<void> _setCarryIn(
+    String monthKey,
+    String categoryId,
+    double value,
+  ) async {
+    _carryIns[_key(monthKey, categoryId)] = value;
+
+    final accountId = CurrentAccount.active.id;
+    if (accountId.isEmpty) return;
+
+    await _client.from('category_allocations').upsert({
+      'account_id': accountId,
+      'month_key': monthKey,
+      'category_id': categoryId,
+      'carry_in': value,
+    });
   }
 
   // ─────────────────────────────────────────────
   // REVENU PRÉVISIONNEL DU MOIS (saisi manuellement)
   // ─────────────────────────────────────────────
   static double getPlannedIncome(String monthKey) {
-    if (!_box.isOpen) return 0.0;
-    return (_box.get(_incomeKey(monthKey)) ?? 0.0).toDouble();
+    return _plannedIncomes[monthKey] ?? 0.0;
   }
 
-  static void setPlannedIncome(String monthKey, double value) {
-    if (!_box.isOpen) return;
-    _box.put(_incomeKey(monthKey), value);
+  static Future<void> setPlannedIncome(String monthKey, double value) async {
+    _plannedIncomes[monthKey] = value;
+
+    final accountId = CurrentAccount.active.id;
+    if (accountId.isEmpty) return;
+
+    await _client.from('planned_income').upsert({
+      'account_id': accountId,
+      'month_key': monthKey,
+      'amount': value,
+    });
   }
 
   // ─────────────────────────────────────────────
@@ -110,14 +164,14 @@ class CategoryAllocationsStore {
   // CLÔTURE DE MOIS : report du restant de chaque enveloppe
   // (positif ou négatif) vers le mois suivant.
   // ─────────────────────────────────────────────
-  static void closeMonth({
+  static Future<void> closeMonth({
     required String monthKey,
     required String nextMonthKey,
     required List<String> categoryIds,
-  }) {
+  }) async {
     for (final categoryId in categoryIds) {
       final leftover = remaining(monthKey, categoryId);
-      _setCarryIn(nextMonthKey, categoryId, leftover);
+      await _setCarryIn(nextMonthKey, categoryId, leftover);
     }
   }
 
@@ -125,7 +179,16 @@ class CategoryAllocationsStore {
   // RESET
   // ─────────────────────────────────────────────
   static Future<void> clearAll() async {
-    if (!_box.isOpen) return;
-    await _box.clear();
+    final accountId = CurrentAccount.active.id;
+    if (accountId.isNotEmpty) {
+      await _client
+          .from('category_allocations')
+          .delete()
+          .eq('account_id', accountId);
+      await _client.from('planned_income').delete().eq('account_id', accountId);
+    }
+    _allocations.clear();
+    _carryIns.clear();
+    _plannedIncomes.clear();
   }
 }

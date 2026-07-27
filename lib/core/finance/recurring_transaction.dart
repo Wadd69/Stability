@@ -76,6 +76,7 @@ class RecurringTransaction {
     );
   }
 
+  /// --- Sérialisation Supabase (colonnes en snake_case) ---
   Map<String, dynamic> toMap() {
     return {
       'id': id,
@@ -83,12 +84,12 @@ class RecurringTransaction {
       'amount': amount,
       'type': type.name,
       'category': category,
-      'containerId': containerId,
+      'container_id': containerId,
       'frequency': frequency.name,
-      'dayOfMonth': dayOfMonth,
-      'startMonthKey': startMonthKey,
-      'endMonthKey': endMonthKey,
-      'lastGeneratedMonthKey': lastGeneratedMonthKey,
+      'day_of_month': dayOfMonth,
+      'start_month_key': startMonthKey,
+      'end_month_key': endMonthKey,
+      'last_generated_month_key': lastGeneratedMonthKey,
       'active': active,
     };
   }
@@ -100,13 +101,13 @@ class RecurringTransaction {
       amount: (map['amount'] as num).toDouble(),
       type: TransactionType.values.firstWhere((e) => e.name == map['type']),
       category: map['category'] as String?,
-      containerId: map['containerId'] as String?,
+      containerId: map['container_id'] as String?,
       frequency: RecurrenceFrequency.values
           .firstWhere((e) => e.name == map['frequency']),
-      dayOfMonth: map['dayOfMonth'] as int,
-      startMonthKey: map['startMonthKey'] as String,
-      endMonthKey: map['endMonthKey'] as String?,
-      lastGeneratedMonthKey: map['lastGeneratedMonthKey'] as String?,
+      dayOfMonth: map['day_of_month'] as int,
+      startMonthKey: map['start_month_key'] as String,
+      endMonthKey: map['end_month_key'] as String?,
+      lastGeneratedMonthKey: map['last_generated_month_key'] as String?,
       active: map['active'] as bool? ?? true,
     );
   }

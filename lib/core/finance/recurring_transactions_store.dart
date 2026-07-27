@@ -1,66 +1,82 @@
-import 'package:hive/hive.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../../accounts/current_account.dart';
 import 'recurring_transaction.dart';
 import 'transaction.dart';
 import 'transactions_store.dart';
 
+/// Gabarits de transactions récurrentes du compte actif — stockés sur
+/// Supabase (table `recurring_transactions`), scopés par `account_id`.
 class RecurringTransactionsStore {
-  static const String _boxName = 'recurring_transactions';
-
-  static late Box _box;
+  static SupabaseClient get _client => Supabase.instance.client;
   static final List<RecurringTransaction> _items = [];
 
   static Future<void> init() async {
-    _box = Hive.isBoxOpen(_boxName)
-        ? Hive.box(_boxName)
-        : await Hive.openBox(_boxName);
+    final accountId = CurrentAccount.active.id;
+    if (accountId.isEmpty) {
+      _items.clear();
+      return;
+    }
 
-    final List stored = _box.get('list', defaultValue: []);
+    final rows = await _client
+        .from('recurring_transactions')
+        .select()
+        .eq('account_id', accountId);
 
     _items
       ..clear()
       ..addAll(
-        stored.cast<Map>().map(
-              (e) => RecurringTransaction.fromMap(
-                Map<String, dynamic>.from(e),
-              ),
-            ),
+        (rows as List)
+            .map((r) => RecurringTransaction.fromMap(r as Map<String, dynamic>)),
       );
   }
 
   static List<RecurringTransaction> get all => List.unmodifiable(_items);
 
-  static void _save() {
-    _box.put('list', _items.map((r) => r.toMap()).toList());
-  }
-
-  static void add(RecurringTransaction recurring) {
+  static Future<void> add(RecurringTransaction recurring) async {
+    await _client.from('recurring_transactions').insert({
+      ...recurring.toMap(),
+      'account_id': CurrentAccount.active.id,
+    });
     _items.add(recurring);
-    _save();
   }
 
-  static void update(RecurringTransaction recurring) {
+  static Future<void> update(RecurringTransaction recurring) async {
     final index = _items.indexWhere((r) => r.id == recurring.id);
     if (index == -1) return;
+
+    await _client
+        .from('recurring_transactions')
+        .update(recurring.toMap())
+        .eq('id', recurring.id);
     _items[index] = recurring;
-    _save();
   }
 
-  static void remove(String id) {
+  static Future<void> remove(String id) async {
+    await _client.from('recurring_transactions').delete().eq('id', id);
     _items.removeWhere((r) => r.id == id);
-    _save();
   }
 
-  static void setActive(String id, bool active) {
+  static Future<void> setActive(String id, bool active) async {
     final index = _items.indexWhere((r) => r.id == id);
     if (index == -1) return;
-    _items[index] = _items[index].copyWith(active: active);
-    _save();
+
+    final updated = _items[index].copyWith(active: active);
+    await _client
+        .from('recurring_transactions')
+        .update({'active': active}).eq('id', id);
+    _items[index] = updated;
   }
 
-  static void clear() {
+  static Future<void> clear() async {
+    final accountId = CurrentAccount.active.id;
+    if (accountId.isNotEmpty) {
+      await _client
+          .from('recurring_transactions')
+          .delete()
+          .eq('account_id', accountId);
+    }
     _items.clear();
-    _save();
   }
 
   // ─────────────────────────────────────────────
@@ -87,8 +103,9 @@ class RecurringTransactionsStore {
   /// Crée les transactions dues pour ce mois à partir des gabarits actifs.
   /// Idempotent : un gabarit déjà généré pour ce mois ne l'est pas deux fois.
   /// Retourne le nombre de transactions créées.
-  static int generateDueForMonth(String monthKey) {
+  static Future<int> generateDueForMonth(String monthKey) async {
     int count = 0;
+    final updatedTemplates = <Map<String, dynamic>>[];
 
     for (int i = 0; i < _items.length; i++) {
       final r = _items[i];
@@ -100,7 +117,7 @@ class RecurringTransactionsStore {
       final lastDayOfMonth = DateTime(year, month + 1, 0).day;
       final day = r.dayOfMonth.clamp(1, lastDayOfMonth);
 
-      TransactionsStore.add(
+      await TransactionsStore.add(
         Transaction(
           id: 'recurring_${r.id}_$monthKey',
           label: r.label,
@@ -113,11 +130,19 @@ class RecurringTransactionsStore {
         ),
       );
 
-      _items[i] = r.copyWith(lastGeneratedMonthKey: monthKey);
+      final updated = r.copyWith(lastGeneratedMonthKey: monthKey);
+      _items[i] = updated;
+      updatedTemplates.add({
+        ...updated.toMap(),
+        'account_id': CurrentAccount.active.id,
+      });
       count++;
     }
 
-    if (count > 0) _save();
+    if (updatedTemplates.isNotEmpty) {
+      await _client.from('recurring_transactions').upsert(updatedTemplates);
+    }
+
     return count;
   }
 }

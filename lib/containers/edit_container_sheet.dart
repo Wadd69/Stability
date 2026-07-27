@@ -193,7 +193,7 @@ class _EditContainerSheetState extends State<EditContainerSheet> {
             Align(
               alignment: Alignment.centerRight,
               child: ElevatedButton(
-                onPressed: () {
+                onPressed: () async {
                   final name = _nameController.text.trim();
                   if (name.isEmpty) return;
 
@@ -230,7 +230,7 @@ class _EditContainerSheetState extends State<EditContainerSheet> {
                       isPrimary: _isPrimary,
                     );
 
-                    store.updateContainer(container);
+                    await store.updateContainer(container);
                   } else {
                     final rates = <InterestRatePeriod>[];
 
@@ -245,24 +245,20 @@ class _EditContainerSheetState extends State<EditContainerSheet> {
                       );
                     }
 
-                    container = store.createContainer(
+                    container = await store.createContainer(
                       name: name,
                       colorValue: _color.toARGB32(),
                       type: _type,
                       interestRates: rates,
                     );
-
-                    if (_isPrimary &&
-                        _type == ContainerType.currentAccount) {
-                      store.setPrimaryCurrentAccount(container.id);
-                    }
                   }
 
                   if (_isPrimary &&
                       _type == ContainerType.currentAccount) {
-                    store.setPrimaryCurrentAccount(container.id);
+                    await store.setPrimaryCurrentAccount(container.id);
                   }
 
+                  if (!context.mounted) return;
                   Navigator.pop(context);
                 },
                 child: const Text('Valider'),

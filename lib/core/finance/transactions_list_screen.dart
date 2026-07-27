@@ -356,8 +356,9 @@ class _TransactionsListScreenState extends State<TransactionsListScreen> {
                           child: const Icon(Icons.delete, color: Colors.white),
                         ),
                         confirmDismiss: (_) => _confirmDelete(t),
-                        onDismissed: (_) {
-                          TransactionsStore.remove(t.id);
+                        onDismissed: (_) async {
+                          await TransactionsStore.remove(t.id);
+                          if (!mounted) return;
                           setState(() {});
                         },
                         child: ListTile(

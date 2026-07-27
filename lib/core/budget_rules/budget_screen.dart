@@ -56,7 +56,8 @@ class _BudgetScreenState extends State<BudgetScreen> {
     );
 
     if (value == null) return;
-    CategoryAllocationsStore.setPlannedIncome(widget.monthKey, value);
+    await CategoryAllocationsStore.setPlannedIncome(widget.monthKey, value);
+    if (!mounted) return;
     setState(() {});
   }
 
@@ -96,7 +97,12 @@ class _BudgetScreenState extends State<BudgetScreen> {
     );
 
     if (value == null) return;
-    CategoryAllocationsStore.setAllocated(widget.monthKey, category.id, value);
+    await CategoryAllocationsStore.setAllocated(
+      widget.monthKey,
+      category.id,
+      value,
+    );
+    if (!mounted) return;
     setState(() {});
   }
 
@@ -133,7 +139,8 @@ class _BudgetScreenState extends State<BudgetScreen> {
 
     if (result == null) return;
     final parsed = double.tryParse(result.replaceAll(',', '.'));
-    CategoryGoalsStore.setGoal(category.id, parsed);
+    await CategoryGoalsStore.setGoal(category.id, parsed);
+    if (!mounted) return;
     setState(() {});
   }
 

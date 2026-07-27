@@ -131,11 +131,11 @@ class BudgetAutomationService {
 
   /// Crée les virements groupés pour les groupes fournis. Idempotent : un
   /// groupe déjà lancé ce mois-ci (même destination) est ignoré.
-  static void launchMonth({
+  static Future<void> launchMonth({
     required String monthKey,
     required String sourceContainerId,
     required List<DestinationGroup> groups,
-  }) {
+  }) async {
     const label = 'Budget du mois';
 
     for (final group in groups) {
@@ -145,7 +145,7 @@ class BudgetAutomationService {
 
       if (group.categories.length == 1) {
         final only = group.categories.first;
-        TransactionsStore.add(
+        await TransactionsStore.add(
           Transaction(
             id: '${transferId}_out',
             label: label,
@@ -158,7 +158,7 @@ class BudgetAutomationService {
             monthKey: monthKey,
           ),
         );
-        TransactionsStore.add(
+        await TransactionsStore.add(
           Transaction(
             id: '${transferId}_in',
             label: label,
@@ -172,7 +172,7 @@ class BudgetAutomationService {
           ),
         );
       } else {
-        TransactionsStore.add(
+        await TransactionsStore.add(
           Transaction(
             id: '${transferId}_out',
             label: label,
@@ -188,7 +188,7 @@ class BudgetAutomationService {
         final dstSplitGroupId = '${transferId}_dst';
         for (int j = 0; j < group.categories.length; j++) {
           final ec = group.categories[j];
-          TransactionsStore.add(
+          await TransactionsStore.add(
             Transaction(
               id: '${transferId}_in_$j',
               label: label,
@@ -210,12 +210,12 @@ class BudgetAutomationService {
   /// Marque comme pointés tous les virements "budget du mois" de ce mois
   /// pas encore validés individuellement. Retourne le nombre de lignes
   /// mises à jour.
-  static int validateTransfers(String monthKey) {
+  static Future<int> validateTransfers(String monthKey) async {
     final prefix = 'budgetrun_$monthKey';
     var count = 0;
     for (final t in TransactionsStore.all) {
       if (t.id.startsWith(prefix) && !t.isCleared) {
-        TransactionsStore.setCleared(t.id, true);
+        await TransactionsStore.setCleared(t.id, true);
         count++;
       }
     }

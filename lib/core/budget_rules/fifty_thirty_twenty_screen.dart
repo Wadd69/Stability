@@ -58,7 +58,8 @@ class _FiftyThirtyTwentyScreenState extends State<FiftyThirtyTwentyScreen> {
     );
 
     if (value == null) return;
-    CategoryAllocationsStore.setPlannedIncome(widget.monthKey, value);
+    await CategoryAllocationsStore.setPlannedIncome(widget.monthKey, value);
+    if (!mounted) return;
     setState(() {});
   }
 

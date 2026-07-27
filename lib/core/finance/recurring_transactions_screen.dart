@@ -29,7 +29,8 @@ class _RecurringTransactionsScreenState
 
     // Si le gabarit vient de devenir dû pour le mois actif, on le génère
     // tout de suite plutôt que d'attendre la prochaine clôture de mois.
-    RecurringTransactionsStore.generateDueForMonth(ActiveMonthStore.current);
+    await RecurringTransactionsStore.generateDueForMonth(ActiveMonthStore.current);
+    if (!mounted) return;
     setState(() {});
   }
 
@@ -48,8 +49,9 @@ class _RecurringTransactionsScreenState
             child: const Text('Annuler'),
           ),
           TextButton(
-            onPressed: () {
-              RecurringTransactionsStore.remove(r.id);
+            onPressed: () async {
+              await RecurringTransactionsStore.remove(r.id);
+              if (!mounted) return;
               setState(() {});
               Navigator.pop(context);
             },
@@ -138,8 +140,9 @@ class _RecurringTransactionsScreenState
                       ),
                       Switch(
                         value: r.active,
-                        onChanged: (v) {
-                          RecurringTransactionsStore.setActive(r.id, v);
+                        onChanged: (v) async {
+                          await RecurringTransactionsStore.setActive(r.id, v);
+                          if (!mounted) return;
                           setState(() {});
                         },
                       ),

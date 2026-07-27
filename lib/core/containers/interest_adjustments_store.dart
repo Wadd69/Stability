@@ -1,40 +1,42 @@
-import 'package:hive/hive.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
+
+import '../../accounts/current_account.dart';
 import 'interest_adjustment.dart';
 
+/// Ajustements d'intérêts par quinzaine et par support — stockés sur
+/// Supabase (table `interest_adjustments`), scopés par compte. Clé
+/// naturelle : (containerId, quinzaineDate).
 class InterestAdjustmentsStore {
-  static const String _boxName = 'interest_adjustments';
-
-  static late Box _box;
+  static SupabaseClient get _client => Supabase.instance.client;
   static final List<InterestAdjustment> _items = [];
 
   // ─────────────────────────────────────────────
   // INIT
   // ─────────────────────────────────────────────
-
   static Future<void> init() async {
-    _box = await Hive.openBox(_boxName);
+    final accountId = CurrentAccount.active.id;
+    if (accountId.isEmpty) {
+      _items.clear();
+      return;
+    }
 
-    final List stored = _box.get('list', defaultValue: []);
+    final rows = await _client
+        .from('interest_adjustments')
+        .select()
+        .eq('account_id', accountId);
 
     _items
       ..clear()
       ..addAll(
-        stored
-            .cast<Map>()
-            .map(
-              (e) => InterestAdjustment.fromMap(
-                Map<String, dynamic>.from(e),
-              ),
-            ),
+        (rows as List)
+            .map((r) => InterestAdjustment.fromMap(r as Map<String, dynamic>)),
       );
   }
 
   // ─────────────────────────────────────────────
   // GETTERS
   // ─────────────────────────────────────────────
-
-  static List<InterestAdjustment> get all =>
-      List.unmodifiable(_items);
+  static List<InterestAdjustment> get all => List.unmodifiable(_items);
 
   /// Récupère l’ajustement pour une quinzaine donnée
   static InterestAdjustment? getFor(
@@ -69,7 +71,7 @@ class InterestAdjustmentsStore {
   // WRITE
   // ─────────────────────────────────────────────
 
-  static void addOrUpdate(InterestAdjustment adj) {
+  static Future<void> addOrUpdate(InterestAdjustment adj) async {
     final index = _items.indexWhere(
       (e) =>
           e.containerId == adj.containerId &&
@@ -82,10 +84,13 @@ class InterestAdjustmentsStore {
       _items[index] = adj;
     }
 
-    _save();
+    await _client.from('interest_adjustments').upsert({
+      ...adj.toMap(),
+      'account_id': CurrentAccount.active.id,
+    });
   }
 
-  static void markAsApplied(InterestAdjustment adj) {
+  static Future<void> markAsApplied(InterestAdjustment adj) async {
     final index = _items.indexWhere(
       (e) =>
           e.containerId == adj.containerId &&
@@ -94,14 +99,12 @@ class InterestAdjustmentsStore {
 
     if (index == -1) return;
 
-    _items[index] = adj.copyWith(applied: true);
-    _save();
-  }
+    final updated = adj.copyWith(applied: true);
+    _items[index] = updated;
 
-  static void _save() {
-    _box.put(
-      'list',
-      _items.map((e) => e.toMap()).toList(),
-    );
+    await _client.from('interest_adjustments').upsert({
+      ...updated.toMap(),
+      'account_id': CurrentAccount.active.id,
+    });
   }
 }

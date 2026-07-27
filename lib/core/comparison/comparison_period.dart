@@ -51,7 +51,7 @@ class ComparisonPeriod {
       year: month.year,
       month: month.month,
       sourceMonths: [month],
-      transactions: List.unmodifiable(month.transactions),
+      transactions: List.unmodifiable(TransactionsStore.archivedForMonth(month.id)),
       totalIncome: month.totalIncome,
       totalExpense: month.totalExpense,
       balance: month.balance,
@@ -70,7 +70,7 @@ class ComparisonPeriod {
     double expense = 0;
 
     for (final m in months) {
-      tx.addAll(m.transactions);
+      tx.addAll(TransactionsStore.archivedForMonth(m.id));
       income += m.totalIncome;
       expense += m.totalExpense;
     }

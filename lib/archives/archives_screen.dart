@@ -103,7 +103,7 @@ class _ArchivesScreenState extends State<ArchivesScreen>
       income += m.totalIncome;
       expense += m.totalExpense;
 
-      for (final t in m.transactions) {
+      for (final t in TransactionsStore.archivedForMonth(m.id)) {
         if (t.type != TransactionType.expense) continue;
         byCategory[t.category] = (byCategory[t.category] ?? 0) + t.amount;
       }
@@ -152,7 +152,7 @@ class _ArchivesScreenState extends State<ArchivesScreen>
 
           final List<Transaction> tx = [];
           for (final m in months) {
-            for (final t in m.transactions) {
+            for (final t in TransactionsStore.archivedForMonth(m.id)) {
               if (t.type != TransactionType.expense) continue;
               if (t.category == e.key) {
                 tx.add(t);

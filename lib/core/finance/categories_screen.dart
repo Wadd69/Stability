@@ -148,17 +148,18 @@ class _CategoriesScreenState extends State<CategoriesScreen> {
               child: const Text('Annuler'),
             ),
             ElevatedButton(
-              onPressed: () {
+              onPressed: () async {
                 final name = controller.text.trim();
                 if (name.isNotEmpty) {
-                  CategoriesStore.add(
+                  await CategoriesStore.add(
                     name: name,
                     colorValue: selectedColor.toARGB32(),
                     bucket: selectedBucket,
                     targetContainerId: selectedTargetContainerId,
                   );
-                  setState(() {});
+                  if (mounted) setState(() {});
                 }
+                if (!context.mounted) return;
                 Navigator.pop(context);
               },
               child: const Text('Ajouter'),
@@ -214,10 +215,10 @@ class _CategoriesScreenState extends State<CategoriesScreen> {
               child: const Text('Annuler'),
             ),
             ElevatedButton(
-              onPressed: () {
+              onPressed: () async {
                 final name = controller.text.trim();
                 if (name.isNotEmpty) {
-                  CategoriesStore.update(
+                  await CategoriesStore.update(
                     category.id,
                     newName: name, // ✅ marche (alias)
                     colorValue: selectedColor.toARGB32(), // ✅ marche
@@ -226,8 +227,9 @@ class _CategoriesScreenState extends State<CategoriesScreen> {
                     targetContainerId: selectedTargetContainerId,
                     clearTargetContainer: selectedTargetContainerId == null,
                   );
-                  setState(() {});
+                  if (mounted) setState(() {});
                 }
+                if (!context.mounted) return;
                 Navigator.pop(context);
               },
               child: const Text('Enregistrer'),
@@ -256,9 +258,10 @@ class _CategoriesScreenState extends State<CategoriesScreen> {
             child: const Text('Annuler'),
           ),
           TextButton(
-            onPressed: () {
-              CategoriesStore.remove(category.id);
-              setState(() {});
+            onPressed: () async {
+              await CategoriesStore.remove(category.id);
+              if (mounted) setState(() {});
+              if (!context.mounted) return;
               Navigator.pop(context);
             },
             child: Text(

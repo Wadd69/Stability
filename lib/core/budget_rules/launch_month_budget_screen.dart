@@ -82,7 +82,7 @@ class _LaunchMonthBudgetScreenState extends State<LaunchMonthBudgetScreen> {
     }
   }
 
-  void _confirm(ContainersStore containersStore) {
+  Future<void> _confirm(ContainersStore containersStore) async {
     final primary = containersStore.primaryCurrentAccount;
     if (primary == null) return;
 
@@ -105,12 +105,13 @@ class _LaunchMonthBudgetScreenState extends State<LaunchMonthBudgetScreen> {
 
     final count = groups.length;
 
-    BudgetAutomationService.launchMonth(
+    await BudgetAutomationService.launchMonth(
       monthKey: widget.monthKey,
       sourceContainerId: primary.id,
       groups: groups,
     );
 
+    if (!mounted) return;
     Navigator.pop(context);
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(

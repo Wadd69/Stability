@@ -1,34 +1,36 @@
-import 'package:hive/hive.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
+
+import '../../accounts/current_account.dart';
 import 'transaction.dart';
 import 'package:stability/core/finance/transaction_type.dart';
 import 'package:stability/core/finance/monthly_balances_store.dart';
 
 // ✅ archives
 import 'package:stability/core/archives/archives_store.dart';
-import 'package:stability/core/archives/archived_month.dart';
 
 class TransactionsStore {
-  static const String _boxName = 'transactions';
-
-  static late Box _box;
+  static SupabaseClient get _client => Supabase.instance.client;
   static final List<Transaction> _transactions = [];
 
   // ─────────────────────────────────────────────
   // INIT
   // ─────────────────────────────────────────────
   static Future<void> init() async {
-    _box = await Hive.openBox(_boxName);
+    final accountId = CurrentAccount.active.id;
+    if (accountId.isEmpty) {
+      _transactions.clear();
+      return;
+    }
 
-    final List stored = _box.get('list', defaultValue: []);
+    final rows = await _client
+        .from('transactions')
+        .select()
+        .eq('account_id', accountId);
 
     _transactions
       ..clear()
       ..addAll(
-        stored.cast<Map>().map(
-              (e) => Transaction.fromMap(
-                Map<String, dynamic>.from(e),
-              ),
-            ),
+        (rows as List).map((r) => Transaction.fromMap(r as Map<String, dynamic>)),
       );
   }
 
@@ -46,34 +48,30 @@ class TransactionsStore {
   static List<Transaction> get all => List.unmodifiable(_transactions);
 
   // ─────────────────────────────────────────────
-  // PERSISTENCE
-  // ─────────────────────────────────────────────
-  static void _save() {
-    _box.put('list', _transactions.map((t) => t.toMap()).toList());
-  }
-
-  // ─────────────────────────────────────────────
   // CRUD
   // ─────────────────────────────────────────────
-  static void add(Transaction transaction) {
+  static Future<void> add(Transaction transaction) async {
+    await _client.from('transactions').insert({
+      ...transaction.toMap(),
+      'account_id': CurrentAccount.active.id,
+    });
     _transactions.add(transaction);
-    _save();
   }
 
-  static void update({
+  static Future<void> update({
     required String id,
     required String label,
     required double amount,
     required DateTime date,
     String? category,
     String? containerId,
-  }) {
+  }) async {
     final index = _transactions.indexWhere((t) => t.id == id);
     if (index == -1) return;
 
     final t = _transactions[index];
 
-    _transactions[index] = t.copyWith(
+    final updated = t.copyWith(
       label: label,
       amount: amount,
       date: date,
@@ -88,21 +86,24 @@ class TransactionsStore {
       originMonthKey: null,
     );
 
-    _save();
+    await _client.from('transactions').update(updated.toMap()).eq('id', id);
+    _transactions[index] = updated;
   }
 
-  static void updateTransaction(Transaction updated) {
+  static Future<void> updateTransaction(Transaction updated) async {
     final index = _transactions.indexWhere((t) => t.id == updated.id);
     if (index == -1) return;
 
     final original = _transactions[index];
     final newMonthKey = _monthKeyFromDate(updated.date);
 
+    final rowsToPersist = <Map<String, dynamic>>[];
+
     if (original.transferId != null) {
       for (int i = 0; i < _transactions.length; i++) {
         final t = _transactions[i];
         if (t.transferId == original.transferId) {
-          _transactions[i] = t.copyWith(
+          final merged = t.copyWith(
             label: updated.label,
             amount: updated.amount,
             date: updated.date,
@@ -113,10 +114,12 @@ class TransactionsStore {
             isCarryOver: false,
             originMonthKey: null, // ✅ redevient normale si édition
           );
+          _transactions[i] = merged;
+          rowsToPersist.add(merged.toMap());
         }
       }
     } else {
-      _transactions[index] = original.copyWith(
+      final merged = original.copyWith(
         label: updated.label,
         amount: updated.amount,
         date: updated.date,
@@ -127,31 +130,42 @@ class TransactionsStore {
         isCarryOver: false,
         originMonthKey: null, // ✅
       );
+      _transactions[index] = merged;
+      rowsToPersist.add(merged.toMap());
     }
 
-    _save();
+    if (rowsToPersist.isNotEmpty) {
+      await _client.from('transactions').upsert(rowsToPersist);
+    }
   }
 
-  static void clearAll() {
+  static Future<void> clearAll() async {
+    final accountId = CurrentAccount.active.id;
+    if (accountId.isNotEmpty) {
+      await _client.from('transactions').delete().eq('account_id', accountId);
+    }
     _transactions.clear();
-    _save();
   }
 
-  static void remove(String id) {
+  static Future<void> remove(String id) async {
     final target = _transactions.where((t) => t.id == id).toList();
     if (target.isEmpty) return;
 
     final t = target.first;
 
     if (t.transferId != null) {
+      await _client.from('transactions').delete().eq('transfer_id', t.transferId!);
       _transactions.removeWhere((e) => e.transferId == t.transferId);
     } else if (t.splitGroupId != null) {
+      await _client
+          .from('transactions')
+          .delete()
+          .eq('split_group_id', t.splitGroupId!);
       _transactions.removeWhere((e) => e.splitGroupId == t.splitGroupId);
     } else {
+      await _client.from('transactions').delete().eq('id', id);
       _transactions.removeWhere((e) => e.id == id);
     }
-
-    _save();
   }
 
   // ─────────────────────────────────────────────
@@ -166,11 +180,12 @@ class TransactionsStore {
   // - elle ne doit JAMAIS apparaître dans l’archive du mois courant
   // - quand elle est finalement pointée, elle s’archive dans son mois d’origine
   // ─────────────────────────────────────────────
-  static void closeMonth({
+  static Future<void> closeMonth({
     required String monthKey,
     required String nextMonthKey,
-  }) {
+  }) async {
     final snapshot = List<Transaction>.from(_transactions);
+    final rowsToUpsert = <Map<String, dynamic>>[];
 
     // 1) CALCUL DU SOLDE FINAL PAR CONTENEUR (AVANT DE MODIFIER LES TX)
     final containerIds = <String>{};
@@ -200,65 +215,45 @@ class TransactionsStore {
           );
 
       final endBalance = opening + movements;
-      MonthlyBalancesStore.setOpeningBalance(nextMonthKey, cid, endBalance);
+      await MonthlyBalancesStore.setOpeningBalance(
+        nextMonthKey,
+        cid,
+        endBalance,
+      );
     }
 
     // 2) ARCHIVAGE / CARRYOVER
+    // Note : plus besoin de mettre à jour l'archive du mois d'origine
+    // quand une transaction reportée est enfin pointée — l'archive ne
+    // stocke plus le détail des transactions (juste des totaux), et la
+    // transaction elle-même est mise à jour via rowsToUpsert ci-dessous.
     final processedTransfers = <String>{};
-
-    void updateOriginArchiveAsCleared(Transaction t) {
-      final origin = t.originMonthKey;
-      if (origin == null) return;
-
-      // on essaye de mettre à jour l’archive du mois d’origine si elle existe
-      final existing = ArchivesStore.all.where((m) => m.id == origin).toList();
-      if (existing.isEmpty) return;
-
-      final month = existing.first;
-
-      final updatedTx = month.transactions.map((x) {
-        if (x.id == t.id) {
-          return x.copyWith(isCleared: true);
-        }
-        return x;
-      }).toList();
-
-      ArchivesStore.add(
-        ArchivedMonth(
-          id: month.id,
-          year: month.year,
-          month: month.month,
-          label: month.label,
-          transactions: updatedTx,
-          totalIncome: month.totalIncome,
-          totalExpense: month.totalExpense,
-          balance: month.balance,
-        ),
-      );
-    }
 
     void archiveWithTrace(Transaction t) {
       // ✅ si carryOver => on archive dans son mois d’origine
       final archiveMonthKey = t.originMonthKey ?? monthKey;
 
-      _transactions.add(
-        Transaction(
-          id: '${t.id}_arch_$archiveMonthKey',
-          label: t.label,
-          amount: t.amount,
-          date: t.date,
-          type: t.type,
-          category: t.category,
-          containerId: t.containerId,
-          transferId: t.transferId,
-          isInterest: t.isInterest,
-          isCleared: true,
-          isArchived: true,
-          isCarryOver: false,
-          monthKey: archiveMonthKey,
-          originMonthKey: t.originMonthKey,
-        ),
+      final archivedCopy = Transaction(
+        id: '${t.id}_arch_$archiveMonthKey',
+        label: t.label,
+        amount: t.amount,
+        date: t.date,
+        type: t.type,
+        category: t.category,
+        containerId: t.containerId,
+        transferId: t.transferId,
+        isInterest: t.isInterest,
+        isCleared: true,
+        isArchived: true,
+        isCarryOver: false,
+        monthKey: archiveMonthKey,
+        originMonthKey: t.originMonthKey,
       );
+      _transactions.add(archivedCopy);
+      rowsToUpsert.add({
+        ...archivedCopy.toMap(),
+        'account_id': CurrentAccount.active.id,
+      });
 
       final idx = _transactions.indexWhere((x) => x.id == t.id);
       if (idx != -1) {
@@ -266,12 +261,7 @@ class TransactionsStore {
           isArchived: true,
           isCarryOver: false,
         );
-      }
-
-      // ✅ optionnel mais logique : si la tx vient d’un mois précédent,
-      // on la marque comme pointée dans l’archive d’origine
-      if (t.originMonthKey != null) {
-        updateOriginArchiveAsCleared(t);
+        rowsToUpsert.add(_transactions[idx].toMap());
       }
     }
 
@@ -287,6 +277,7 @@ class TransactionsStore {
           // ✅ on fixe le mois d’origine UNE FOIS
           originMonthKey: t.originMonthKey ?? monthKey,
         );
+        rowsToUpsert.add(_transactions[idx].toMap());
       }
     }
 
@@ -323,7 +314,7 @@ class TransactionsStore {
       }
     }
 
-    // 3) CRÉATION / MAJ ARCHIVE DU MOIS (SANS LES carryOver)
+    // 3) CRÉATION / MAJ DU RÉSUMÉ D'ARCHIVE DU MOIS (SANS LES carryOver)
     final archivedTx = snapshot
         .where((t) =>
             t.monthKey == monthKey &&
@@ -348,46 +339,49 @@ class TransactionsStore {
     final prev = ArchivesStore.getPreviousMonth(year, month);
     final opening = prev?.balance ?? 0;
 
-    ArchivesStore.add(
-      ArchivedMonth(
-        id: monthKey,
-        year: year,
-        month: month,
-        label: monthKey,
-        transactions: archivedTx,
-        totalIncome: income,
-        totalExpense: expense,
-        balance: opening + income - expense,
-      ),
-    );
+    if (rowsToUpsert.isNotEmpty) {
+      await _client.from('transactions').upsert(rowsToUpsert);
+    }
 
-    _save();
+    await ArchivesStore.archiveMonth(
+      monthKey: monthKey,
+      label: monthKey,
+      totalIncome: income,
+      totalExpense: expense,
+      balance: opening + income - expense,
+    );
   }
 
   // ─────────────────────────────────────────────
   // POINTAGE
   // ─────────────────────────────────────────────
-  static void toggleCleared(String id) {
+  static Future<void> toggleCleared(String id) async {
     final index = _transactions.indexWhere((t) => t.id == id);
     if (index == -1) return;
 
     final t = _transactions[index];
-    _transactions[index] = t.copyWith(isCleared: !t.isCleared);
+    final updated = t.copyWith(isCleared: !t.isCleared);
 
-    _save();
+    await _client
+        .from('transactions')
+        .update({'is_cleared': updated.isCleared}).eq('id', id);
+    _transactions[index] = updated;
   }
 
   /// Force explicitement l'état pointé (contrairement à [toggleCleared],
   /// qui inverse toujours l'état courant) — utile pour une validation en
   /// masse où l'état cible est connu à l'avance.
-  static void setCleared(String id, bool value) {
+  static Future<void> setCleared(String id, bool value) async {
     final index = _transactions.indexWhere((t) => t.id == id);
     if (index == -1) return;
 
     final t = _transactions[index];
-    _transactions[index] = t.copyWith(isCleared: value);
+    final updated = t.copyWith(isCleared: value);
 
-    _save();
+    await _client
+        .from('transactions')
+        .update({'is_cleared': value}).eq('id', id);
+    _transactions[index] = updated;
   }
 
   // ─────────────────────────────────────────────
@@ -425,6 +419,15 @@ class TransactionsStore {
     return _transactions.where((t) => !t.id.contains('_arch_')).toList();
   }
 
+  /// Transactions archivées d'un mois donné (remplace l'ancien
+  /// `ArchivedMonth.transactions`, désormais normalisé hors de la table
+  /// des archives — voir [ArchivesStore]).
+  static List<Transaction> archivedForMonth(String monthKey) {
+    return _transactions
+        .where((t) => t.monthKey == monthKey && t.isArchived)
+        .toList();
+  }
+
   static double balanceByContainer(String? containerId) {
     final list = byContainer(containerId).where((t) => !t.isCarryOver);
     return list.fold<double>(
@@ -437,12 +440,12 @@ class TransactionsStore {
   // ─────────────────────────────────────────────
   // INTÉRÊTS
   // ─────────────────────────────────────────────
-  static void addInterestTransaction({
+  static Future<void> addInterestTransaction({
     required String containerId,
     required DateTime quinzaineDate,
     required double amount,
     required String containerName,
-  }) {
+  }) async {
     final alreadyExists = _transactions.any(
       (t) =>
           t.isInterest &&
@@ -452,22 +455,24 @@ class TransactionsStore {
 
     if (alreadyExists) return;
 
-    _transactions.add(
-      Transaction(
-        id: 'interest_${containerId}_${quinzaineDate.toIso8601String()}',
-        label:
-            'Intérêts – ${quinzaineDate.day == 1 ? '01' : '16'}/${quinzaineDate.month.toString().padLeft(2, '0')}/${quinzaineDate.year}',
-        amount: amount,
-        date: quinzaineDate,
-        type: TransactionType.income,
-        containerId: containerId,
-        isInterest: true,
-        isCarryOver: false,
-        monthKey: _monthKeyFromDate(quinzaineDate),
-        originMonthKey: null,
-      ),
+    final transaction = Transaction(
+      id: 'interest_${containerId}_${quinzaineDate.toIso8601String()}',
+      label:
+          'Intérêts – ${quinzaineDate.day == 1 ? '01' : '16'}/${quinzaineDate.month.toString().padLeft(2, '0')}/${quinzaineDate.year}',
+      amount: amount,
+      date: quinzaineDate,
+      type: TransactionType.income,
+      containerId: containerId,
+      isInterest: true,
+      isCarryOver: false,
+      monthKey: _monthKeyFromDate(quinzaineDate),
+      originMonthKey: null,
     );
 
-    _save();
+    await _client.from('transactions').insert({
+      ...transaction.toMap(),
+      'account_id': CurrentAccount.active.id,
+    });
+    _transactions.add(transaction);
   }
 }

@@ -424,7 +424,24 @@ class _ComparisonHubScreenState extends State<ComparisonHubScreen> {
           : _categoryName(focusedCategoryId),
       SizedBox(
         height: 320,
-        child: Stack(
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            // Rayons fixes en pixels côté fl_chart (jamais réduits tout
+            // seuls) : sur un téléphone étroit, l'anneau de détail (le plus
+            // grand) dépasserait la largeur disponible et serait rogné par
+            // le Stack. Facteur d'échelle commun pour rester dans le cadre.
+            const baseCenterSpace = 40.0;
+            const baseRadius = 70.0;
+            const focusedCenterSpace = 90.0;
+            const focusedRadius = 80.0;
+            final neededDiameter = focusedCategoryId != null
+                ? (focusedCenterSpace + focusedRadius) * 2
+                : (baseCenterSpace + baseRadius) * 2;
+            final scale = constraints.maxWidth <= 0
+                ? 1.0
+                : (constraints.maxWidth / neededDiameter).clamp(0.0, 1.0);
+
+            return Stack(
           alignment: Alignment.center,
           children: [
             // ── anneau extérieur : transactions (si focus catégorie)
@@ -432,7 +449,7 @@ class _ComparisonHubScreenState extends State<ComparisonHubScreen> {
               PieChart(
                 PieChartData(
                   startDegreeOffset: -90,
-                  centerSpaceRadius: 90,
+                  centerSpaceRadius: focusedCenterSpace * scale,
                   sectionsSpace: 2,
                   sections: details.map((t) {
                     final ratio = detailsSum == 0 ? 0 : t.amount / detailsSum;
@@ -440,7 +457,7 @@ class _ComparisonHubScreenState extends State<ComparisonHubScreen> {
 
                     return PieChartSectionData(
                       value: t.amount,
-                      radius: 80,
+                      radius: focusedRadius * scale,
                       color: _shadeFromAmount(
                         _baseCategoryColor(focusedCategoryId),
                         t.amount,
@@ -467,7 +484,7 @@ class _ComparisonHubScreenState extends State<ComparisonHubScreen> {
             PieChart(
               PieChartData(
                 startDegreeOffset: -90,
-                centerSpaceRadius: 40,
+                centerSpaceRadius: baseCenterSpace * scale,
                 sectionsSpace: 2,
                 pieTouchData: PieTouchData(
                   touchCallback: (event, response) {
@@ -487,7 +504,7 @@ class _ComparisonHubScreenState extends State<ComparisonHubScreen> {
                   final ratio = totalSum == 0 ? 0 : e.value / totalSum;
                   return PieChartSectionData(
                     value: e.value,
-                    radius: 70,
+                    radius: baseRadius * scale,
                     color: _shade(_baseCategoryColor(e.key), 0.85),
                     title: donutAsPercentage
                         ? '${(ratio * 100).toStringAsFixed(1)}%'
@@ -528,6 +545,8 @@ class _ComparisonHubScreenState extends State<ComparisonHubScreen> {
               ),
             ),
           ],
+            );
+          },
         ),
       ),
       460,

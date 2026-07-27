@@ -1,13 +1,12 @@
-import '../finance/transaction.dart';
-
+/// Résumé d'un mois archivé. Ne contient plus les transactions elles-mêmes
+/// (ancienne duplication corrigée) — celles-ci restent des lignes normales
+/// dans `TransactionsStore` (`isArchived = true`, `monthKey` correspondant),
+/// consultables via `TransactionsStore.archivedForMonth(id)`.
 class ArchivedMonth {
-  final String id;
+  final String id; // = monthKey ("YYYY-MM")
   final int year;
   final int month; // 1–12
   final String label; // ex: "Févr. 2026"
-
-  /// Copie figée des transactions du mois
-  final List<Transaction> transactions;
 
   final double totalIncome;
   final double totalExpense;
@@ -18,39 +17,32 @@ class ArchivedMonth {
     required this.year,
     required this.month,
     required this.label,
-    required this.transactions,
     required this.totalIncome,
     required this.totalExpense,
     required this.balance,
   });
 
+  /// --- Sérialisation Supabase (colonnes en snake_case) ---
   Map<String, dynamic> toMap() {
     return {
-      'id': id,
+      'month_key': id,
       'year': year,
       'month': month,
       'label': label,
-      'transactions': transactions.map((t) => t.toMap()).toList(),
-      'totalIncome': totalIncome,
-      'totalExpense': totalExpense,
+      'total_income': totalIncome,
+      'total_expense': totalExpense,
       'balance': balance,
     };
   }
 
   factory ArchivedMonth.fromMap(Map<dynamic, dynamic> map) {
     return ArchivedMonth(
-      id: map['id'] as String,
+      id: map['month_key'] as String,
       year: map['year'] as int,
       month: map['month'] as int,
       label: map['label'] as String,
-      transactions: (map['transactions'] as List)
-          .cast<Map>()
-          .map((e) => Transaction.fromMap(
-                Map<String, dynamic>.from(e),
-              ))
-          .toList(),
-      totalIncome: (map['totalIncome'] as num).toDouble(),
-      totalExpense: (map['totalExpense'] as num).toDouble(),
+      totalIncome: (map['total_income'] as num).toDouble(),
+      totalExpense: (map['total_expense'] as num).toDouble(),
       balance: (map['balance'] as num).toDouble(),
     );
   }

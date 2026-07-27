@@ -1,21 +1,37 @@
-import 'package:hive/hive.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
+
+import '../../accounts/current_account.dart';
 
 /// Stocke UNIQUEMENT les soldes d’ouverture par mois et par conteneur.
 /// 👉 Aucune transaction ici.
 /// 👉 Aucune logique de pointage.
 /// 👉 Source de vérité du solde quand on change de mois.
+///
+/// Stockée sur Supabase (table `monthly_balances`), scopée par compte.
+/// Lecture toujours synchrone (cache en mémoire) ; seules les écritures et
+/// [init] font un aller-retour réseau.
 class MonthlyBalancesStore {
-  static const String _boxName = 'monthly_balances';
-  static late Box _box;
+  static SupabaseClient get _client => Supabase.instance.client;
+  static final Map<String, double> _balances = {};
 
   // ─────────────────────────────────────────────
   // INIT
   // ─────────────────────────────────────────────
   static Future<void> init() async {
-    if (Hive.isBoxOpen(_boxName)) {
-      _box = Hive.box(_boxName);
-    } else {
-      _box = await Hive.openBox(_boxName);
+    _balances.clear();
+
+    final accountId = CurrentAccount.active.id;
+    if (accountId.isEmpty) return;
+
+    final rows = await _client
+        .from('monthly_balances')
+        .select()
+        .eq('account_id', accountId);
+
+    for (final r in (rows as List)) {
+      final row = r as Map<String, dynamic>;
+      _balances[_key(row['month_key'] as String, row['container_id'] as String)] =
+          (row['opening_balance'] as num).toDouble();
     }
   }
 
@@ -29,17 +45,25 @@ class MonthlyBalancesStore {
   // API — SOLDE D’OUVERTURE
   // ─────────────────────────────────────────────
   static double getOpeningBalance(String monthKey, String containerId) {
-    if (!_box.isOpen) return 0.0;
-    return (_box.get(_key(monthKey, containerId)) ?? 0.0).toDouble();
+    return _balances[_key(monthKey, containerId)] ?? 0.0;
   }
 
-  static void setOpeningBalance(
+  static Future<void> setOpeningBalance(
     String monthKey,
     String containerId,
     double value,
-  ) {
-    if (!_box.isOpen) return;
-    _box.put(_key(monthKey, containerId), value);
+  ) async {
+    _balances[_key(monthKey, containerId)] = value;
+
+    final accountId = CurrentAccount.active.id;
+    if (accountId.isEmpty) return;
+
+    await _client.from('monthly_balances').upsert({
+      'account_id': accountId,
+      'month_key': monthKey,
+      'container_id': containerId,
+      'opening_balance': value,
+    });
   }
 
   // ─────────────────────────────────────────────
@@ -47,43 +71,27 @@ class MonthlyBalancesStore {
   // (important pour propager aussi les comptes sans transaction)
   // ─────────────────────────────────────────────
   static List<String> containerIdsForMonth(String monthKey) {
-    if (!_box.isOpen) return const [];
-
-    final keys = _box.keys
-        .whereType<String>()
-        .where((k) => k.startsWith('$monthKey::'))
+    final prefix = '$monthKey::';
+    return _balances.keys
+        .where((k) => k.startsWith(prefix))
+        .map((k) => k.substring(prefix.length))
         .toList();
-
-    final out = <String>[];
-    for (final k in keys) {
-      final parts = k.split('::');
-      if (parts.length == 2) out.add(parts[1]);
-    }
-    return out;
   }
 
   // ─────────────────────────────────────────────
   // PROPAGATION (ancienne)
   // ─────────────────────────────────────────────
-  static void propagateToNextMonth({
+  static Future<void> propagateToNextMonth({
     required String currentMonthKey,
     required String nextMonthKey,
-  }) {
-    if (!_box.isOpen) return;
+  }) async {
+    final prefix = '$currentMonthKey::';
+    final matches =
+        _balances.entries.where((e) => e.key.startsWith(prefix)).toList();
 
-    final keys = _box.keys
-        .whereType<String>()
-        .where((k) => k.startsWith('$currentMonthKey::'))
-        .toList();
-
-    for (final key in keys) {
-      final parts = key.split('::');
-      if (parts.length != 2) continue;
-
-      final containerId = parts[1];
-      final value = (_box.get(key) ?? 0.0).toDouble();
-
-      _box.put('$nextMonthKey::$containerId', value);
+    for (final e in matches) {
+      final containerId = e.key.substring(prefix.length);
+      await setOpeningBalance(nextMonthKey, containerId, e.value);
     }
   }
 
@@ -91,7 +99,13 @@ class MonthlyBalancesStore {
   // RESET
   // ─────────────────────────────────────────────
   static Future<void> clearAll() async {
-    if (!_box.isOpen) return;
-    await _box.clear();
+    final accountId = CurrentAccount.active.id;
+    if (accountId.isNotEmpty) {
+      await _client
+          .from('monthly_balances')
+          .delete()
+          .eq('account_id', accountId);
+    }
+    _balances.clear();
   }
 }

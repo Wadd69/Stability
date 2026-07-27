@@ -1,6 +1,7 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:hive/hive.dart';
 
 import 'app_settings_store.dart';
 import '../help/help_screen.dart';
@@ -15,7 +16,9 @@ import '../core/finance/active_month_store.dart';
 import '../core/archives/archives_store.dart';
 import '../core/finance/monthly_balances_store.dart';
 import '../core/budget_rules/category_allocations_store.dart';
+import '../core/budget_rules/category_goals_store.dart';
 import '../core/finance/recurring_transactions_store.dart';
+import '../core/backup/backup_service.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
@@ -46,13 +49,97 @@ class _SettingsScreenState extends State<SettingsScreen> {
     return '${now.year}-${now.month.toString().padLeft(2, '0')}';
   }
 
-  Future<void> _safeClearBox(String boxName) async {
+  Future<void> _createBackup() async {
     try {
-      final box = Hive.isBoxOpen(boxName)
-          ? Hive.box(boxName)
-          : await Hive.openBox(boxName);
-      await box.clear();
-    } catch (_) {}
+      final path = await BackupService.exportToFile();
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Sauvegarde créée : $path')),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Échec de la sauvegarde : $e')),
+      );
+    }
+  }
+
+  Future<void> _pickAndRestoreBackup() async {
+    final backups = await BackupService.listBackups();
+    if (!mounted) return;
+
+    if (backups.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Aucune sauvegarde trouvée dans ~/StabilityBackups'),
+        ),
+      );
+      return;
+    }
+
+    final selected = await showModalBottomSheet<File>(
+      context: context,
+      builder: (_) => SafeArea(
+        child: ListView(
+          shrinkWrap: true,
+          children: backups.map((f) {
+            final modified = f.statSync().modified;
+            String p(int n) => n.toString().padLeft(2, '0');
+            return ListTile(
+              leading: const Icon(Icons.restore),
+              title: Text(f.uri.pathSegments.last),
+              subtitle: Text(
+                '${p(modified.day)}/${p(modified.month)}/${modified.year} '
+                'à ${p(modified.hour)}:${p(modified.minute)}',
+              ),
+              onTap: () => Navigator.pop(context, f),
+            );
+          }).toList(),
+        ),
+      ),
+    );
+
+    if (selected == null) return;
+    if (!mounted) return;
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: const Text('Restaurer cette sauvegarde ?'),
+        content: Text(
+          'Toutes les données actuelles (transactions, catégories, '
+          'supports, budgets) seront remplacées par le contenu de '
+          '"${selected.uri.pathSegments.last}". Cette action est '
+          'irréversible.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Annuler'),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: context.appColors.negative,
+            ),
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Restaurer'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true) return;
+    if (!mounted) return;
+
+    await BackupService.restoreFromFile(selected);
+    if (!mounted) return;
+    await loadAccountData(context);
+    if (!mounted) return;
+
+    Navigator.of(context).pushAndRemoveUntil(
+      MaterialPageRoute(builder: (_) => const AppRoot()),
+      (route) => false,
+    );
   }
 
   Future<void> _devResetMontant() async {
@@ -81,11 +168,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
     if (ok != true) return;
     if (!mounted) return;
 
-    TransactionsStore.clearAll();
-    ArchivesStore.clear();
+    await TransactionsStore.clearAll();
+    await ArchivesStore.clear();
     await MonthlyBalancesStore.clearAll();
 
-    ActiveMonthStore.set(_currentMonthKey());
+    await ActiveMonthStore.set(_currentMonthKey());
 
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
@@ -120,18 +207,17 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
     if (ok != true) return;
     if (!mounted) return;
+    final containersStore = context.read<ContainersStore>();
 
-    TransactionsStore.clearAll();
-    ArchivesStore.clear();
-    CategoriesStore.clear();
-    context.read<ContainersStore>().clearAll();
+    await TransactionsStore.clearAll();
+    await ArchivesStore.clear();
+    await CategoriesStore.clear();
+    await containersStore.clearAll();
     await MonthlyBalancesStore.clearAll();
     await CategoryAllocationsStore.clearAll();
-    await _safeClearBox('category_goals');
-    RecurringTransactionsStore.clear();
-
-    await _safeClearBox('active_month');
-    await ActiveMonthStore.init();
+    await CategoryGoalsStore.clearAll();
+    await RecurringTransactionsStore.clear();
+    await ActiveMonthStore.clearAll();
 
     CurrentAccount.clear();
 
@@ -190,6 +276,37 @@ class _SettingsScreenState extends State<SettingsScreen> {
               onPressed: _save,
               child: const Text('Enregistrer'),
             ),
+          ),
+
+          const SizedBox(height: 40),
+          const Divider(),
+          const SizedBox(height: 16),
+
+          const Text(
+            'Sauvegarde locale',
+            style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            'Crée un fichier reprenant toutes vos données (transactions, '
+            'catégories, supports, budgets) dans ~/StabilityBackups sur cet '
+            'ordinateur. Rien n\'est envoyé en ligne.',
+            style: TextStyle(
+              fontSize: 12,
+              color: Theme.of(context).colorScheme.onSurfaceVariant,
+            ),
+          ),
+          const SizedBox(height: 16),
+          ElevatedButton.icon(
+            onPressed: _createBackup,
+            icon: const Icon(Icons.save_alt),
+            label: const Text('Créer une sauvegarde'),
+          ),
+          const SizedBox(height: 12),
+          OutlinedButton.icon(
+            onPressed: _pickAndRestoreBackup,
+            icon: const Icon(Icons.restore),
+            label: const Text('Restaurer une sauvegarde'),
           ),
 
           const SizedBox(height: 40),

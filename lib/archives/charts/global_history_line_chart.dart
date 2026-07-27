@@ -6,6 +6,7 @@ import '../../core/archives/archives_store.dart';
 import '../../core/archives/archived_month.dart';
 import '../../core/finance/categories_store.dart';
 import '../../core/finance/transaction.dart';
+import '../../core/finance/transactions_store.dart';
 import '../../theme/app_colors.dart';
 import '../../help/help_screen.dart';
 import '../../help/help_topic.dart';
@@ -56,8 +57,9 @@ class _GlobalHistoryLineChartScreenState
     return m;
   }
 
-  List<Transaction> get _allTransactions =>
-      _months.expand((m) => m.transactions).toList();
+  List<Transaction> get _allTransactions => _months
+      .expand((m) => TransactionsStore.archivedForMonth(m.id))
+      .toList();
 
   bool _allowed(String? id) =>
       selectedCategories.contains('__ALL__') ||
@@ -177,7 +179,7 @@ class _GlobalHistoryLineChartScreenState
       double exp = 0;
       double inc = 0;
 
-      for (final t in m.transactions) {
+      for (final t in TransactionsStore.archivedForMonth(m.id)) {
         if (!_allowed(t.category)) continue;
 
         perCategory.putIfAbsent(t.category, () => []);

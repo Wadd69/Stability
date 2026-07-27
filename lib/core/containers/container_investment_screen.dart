@@ -48,12 +48,12 @@ class _ContainerInvestmentScreenState
     _refreshStockPrices();
   }
 
-  void _persist() {
+  Future<void> _persist() async {
     final updated = widget.container.copyWith(
       cryptoHoldings: _cryptoHoldings,
       stockHoldings: _stockHoldings,
     );
-    context.read<ContainersStore>().updateContainer(updated);
+    await context.read<ContainersStore>().updateContainer(updated);
   }
 
   // ─────────────────────────────────────────────

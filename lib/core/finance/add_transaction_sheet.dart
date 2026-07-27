@@ -339,7 +339,7 @@ class _AddTransactionSheetState extends State<AddTransactionSheet> {
     setState(() {});
   }
 
-  void _saveTransfer(String label, String monthKey) {
+  Future<void> _saveTransfer(String label, String monthKey) async {
     final bothSplit = _isSourceSplit && _isDestSplit;
     final sourceTotal = _sourceLegTotal;
     final destTotal = _destLegTotal;
@@ -369,7 +369,7 @@ class _AddTransactionSheetState extends State<AddTransactionSheet> {
 
     final existingTransferId = widget.existing?.transferId;
     if (existingTransferId != null) {
-      TransactionsStore.remove(widget.existing!.id);
+      await TransactionsStore.remove(widget.existing!.id);
     }
     final transferId =
         existingTransferId ?? DateTime.now().millisecondsSinceEpoch.toString();
@@ -379,7 +379,7 @@ class _AddTransactionSheetState extends State<AddTransactionSheet> {
       final srcSplitGroupId = '${transferId}_src';
       for (int i = 0; i < _sourceLegLines.length; i++) {
         final line = _sourceLegLines[i];
-        TransactionsStore.add(
+        await TransactionsStore.add(
           Transaction(
             id: '${transferId}_out_$i',
             label: label,
@@ -395,7 +395,7 @@ class _AddTransactionSheetState extends State<AddTransactionSheet> {
         );
       }
     } else {
-      TransactionsStore.add(
+      await TransactionsStore.add(
         Transaction(
           id: '${transferId}_out',
           label: label,
@@ -415,7 +415,7 @@ class _AddTransactionSheetState extends State<AddTransactionSheet> {
       final dstSplitGroupId = '${transferId}_dst';
       for (int j = 0; j < _destLegLines.length; j++) {
         final line = _destLegLines[j];
-        TransactionsStore.add(
+        await TransactionsStore.add(
           Transaction(
             id: '${transferId}_in_$j',
             label: label,
@@ -431,7 +431,7 @@ class _AddTransactionSheetState extends State<AddTransactionSheet> {
         );
       }
     } else {
-      TransactionsStore.add(
+      await TransactionsStore.add(
         Transaction(
           id: '${transferId}_in',
           label: label,
@@ -446,10 +446,11 @@ class _AddTransactionSheetState extends State<AddTransactionSheet> {
       );
     }
 
+    if (!mounted) return;
     Navigator.pop(context);
   }
 
-  void _save() {
+  Future<void> _save() async {
     if (!_formKey.currentState!.validate()) return;
 
     final label = _labelController.text.trim().isNotEmpty
@@ -464,7 +465,7 @@ class _AddTransactionSheetState extends State<AddTransactionSheet> {
     // 🔁 TRANSFERT (simple ou scindé, source et/ou destination)
     // ─────────────────────────────────────────
     if (_isTransfer) {
-      _saveTransfer(label, monthKey);
+      await _saveTransfer(label, monthKey);
       return;
     }
 
@@ -473,7 +474,7 @@ class _AddTransactionSheetState extends State<AddTransactionSheet> {
     // ─────────────────────────────────────────
     if (_isSplit) {
       if (widget.existing != null) {
-        TransactionsStore.remove(widget.existing!.id);
+        await TransactionsStore.remove(widget.existing!.id);
       }
 
       final splitGroupId = widget.existing?.splitGroupId ??
@@ -489,7 +490,7 @@ class _AddTransactionSheetState extends State<AddTransactionSheet> {
                 ? CategoriesStore.getById(line.categoryId!)?.name ?? ''
                 : '');
 
-        TransactionsStore.add(
+        await TransactionsStore.add(
           Transaction(
             id: '${splitGroupId}_$i',
             label: lineLabel,
@@ -504,6 +505,7 @@ class _AddTransactionSheetState extends State<AddTransactionSheet> {
         );
       }
 
+      if (!mounted) return;
       Navigator.pop(context);
       return;
     }
@@ -515,7 +517,7 @@ class _AddTransactionSheetState extends State<AddTransactionSheet> {
     // ➕ ENTRÉE / ➖ SORTIE CLASSIQUE
     // ─────────────────────────────────────────
     if (widget.existing == null) {
-      TransactionsStore.add(
+      await TransactionsStore.add(
         Transaction(
           id: DateTime.now().millisecondsSinceEpoch.toString(),
           label: label,
@@ -529,8 +531,8 @@ class _AddTransactionSheetState extends State<AddTransactionSheet> {
       );
     } else if (widget.existing!.splitGroupId != null) {
       // Reconsolidation d'un split en une transaction unique.
-      TransactionsStore.remove(widget.existing!.id);
-      TransactionsStore.add(
+      await TransactionsStore.remove(widget.existing!.id);
+      await TransactionsStore.add(
         Transaction(
           id: DateTime.now().millisecondsSinceEpoch.toString(),
           label: label,
@@ -543,7 +545,7 @@ class _AddTransactionSheetState extends State<AddTransactionSheet> {
         ),
       );
     } else {
-      TransactionsStore.updateTransaction(
+      await TransactionsStore.updateTransaction(
         widget.existing!.copyWith(
           label: label,
           amount: amount,
@@ -554,6 +556,7 @@ class _AddTransactionSheetState extends State<AddTransactionSheet> {
       );
     }
 
+    if (!mounted) return;
     Navigator.pop(context);
   }
 

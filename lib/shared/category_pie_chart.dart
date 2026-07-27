@@ -223,14 +223,33 @@ class _CategoryPieChartState extends State<CategoryPieChart> {
             ),
           SizedBox(
             height: 300,
-            child: Stack(
+            child: LayoutBuilder(
+              builder: (context, constraints) {
+                // Les rayons ci-dessous sont fixes en pixels côté fl_chart
+                // (il ne les réduit jamais de lui-même) : sur un écran de
+                // téléphone étroit, le donut de détail (le plus grand)
+                // dépasserait la largeur disponible et serait rogné par le
+                // Stack. On calcule un facteur d'échelle commun pour que
+                // tout reste visible, quelle que soit la largeur.
+                const baseCenterSpace = 40.0;
+                const baseRadius = 70.0;
+                const focusedCenterSpace = 85.0;
+                const focusedRadius = 78.0;
+                final neededDiameter = focused != null
+                    ? (focusedCenterSpace + focusedRadius) * 2
+                    : (baseCenterSpace + baseRadius) * 2;
+                final scale = constraints.maxWidth <= 0
+                    ? 1.0
+                    : (constraints.maxWidth / neededDiameter).clamp(0.0, 1.0);
+
+                return Stack(
               alignment: Alignment.center,
               children: [
                 if (focused != null && details.isNotEmpty)
                   PieChart(
                     PieChartData(
                       startDegreeOffset: -90,
-                      centerSpaceRadius: 85,
+                      centerSpaceRadius: focusedCenterSpace * scale,
                       sectionsSpace: 2,
                       sections: details.map((t) {
                         final ratio = detailsSum == 0 ? 0 : t.amount / detailsSum;
@@ -238,7 +257,7 @@ class _CategoryPieChartState extends State<CategoryPieChart> {
 
                         return PieChartSectionData(
                           value: t.amount,
-                          radius: 78,
+                          radius: focusedRadius * scale,
                           color: _tintForType(
                             _shadeFromAmount(
                               _baseCategoryColor(focused.categoryId),
@@ -267,7 +286,7 @@ class _CategoryPieChartState extends State<CategoryPieChart> {
                 PieChart(
                   PieChartData(
                     startDegreeOffset: -90,
-                    centerSpaceRadius: 40,
+                    centerSpaceRadius: baseCenterSpace * scale,
                     sectionsSpace: 2,
                     pieTouchData: PieTouchData(
                       touchCallback: (event, response) {
@@ -287,7 +306,7 @@ class _CategoryPieChartState extends State<CategoryPieChart> {
                           : '${e.value.toStringAsFixed(0)}${widget.currencySymbol}';
                       return PieChartSectionData(
                         value: e.value,
-                        radius: 70,
+                        radius: baseRadius * scale,
                         color: _tintForType(
                           _shade(_baseCategoryColor(e.key.categoryId), 0.85),
                           e.key.type,
@@ -322,7 +341,9 @@ class _CategoryPieChartState extends State<CategoryPieChart> {
                     ],
                   ),
                 ),
-              ],
+                  ],
+                );
+              },
             ),
           ),
           if (widget.mode == PieChartMode.both && focused == null)

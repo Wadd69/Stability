@@ -146,9 +146,9 @@ class ContainerInterestsScreen extends StatelessWidget {
                     child: ElevatedButton.icon(
                       icon: const Icon(Icons.add),
                       label: const Text('Ajouter les intérêts au solde'),
-                      onPressed: () {
+                      onPressed: () async {
                         for (final l in lines) {
-                          TransactionsStore.addInterestTransaction(
+                          await TransactionsStore.addInterestTransaction(
                             containerId: container.id,
                             quinzaineDate: l.quinzaineDate,
                             amount: l.displayedInterest,
@@ -156,6 +156,7 @@ class ContainerInterestsScreen extends StatelessWidget {
                           );
                         }
 
+                        if (!context.mounted) return;
                         ScaffoldMessenger.of(context).showSnackBar(
                           const SnackBar(
                             content: Text('Intérêts ajoutés au solde'),
@@ -297,13 +298,13 @@ class ContainerInterestsScreen extends StatelessWidget {
             child: const Text('Annuler'),
           ),
           ElevatedButton(
-            onPressed: () {
+            onPressed: () async {
               final value = double.tryParse(
                 controller.text.replaceAll(',', '.'),
               );
               if (value == null) return;
 
-              InterestAdjustmentsStore.addOrUpdate(
+              await InterestAdjustmentsStore.addOrUpdate(
                 InterestAdjustment(
                   containerId: container.id,
                   quinzaineDate: line.quinzaineDate,
@@ -312,6 +313,7 @@ class ContainerInterestsScreen extends StatelessWidget {
                 ),
               );
 
+              if (!context.mounted) return;
               Navigator.pop(context);
             },
             child: const Text('Valider'),
