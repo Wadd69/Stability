@@ -52,9 +52,52 @@ class _SettingsScreenState extends State<SettingsScreen> {
     return '${now.year}-${now.month.toString().padLeft(2, '0')}';
   }
 
+  /// Demande une phrase de passe à l'utilisateur (création ou
+  /// confirmation) — utilisée pour chiffrer/déchiffrer un fichier de
+  /// sauvegarde, jamais stockée nulle part.
+  Future<String?> _askPassphrase({
+    required String title,
+    required String helperText,
+  }) async {
+    final controller = TextEditingController();
+    return showDialog<String>(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: Text(title),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          obscureText: true,
+          decoration: InputDecoration(
+            labelText: 'Phrase de passe',
+            helperText: helperText,
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Annuler'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(context, controller.text),
+            child: const Text('OK'),
+          ),
+        ],
+      ),
+    );
+  }
+
   Future<void> _createBackup() async {
+    final passphrase = await _askPassphrase(
+      title: 'Chiffrer la sauvegarde',
+      helperText: 'Requise pour restaurer ce fichier plus tard. '
+          'À retenir : elle n\'est stockée nulle part.',
+    );
+    if (passphrase == null || passphrase.isEmpty) return;
+    if (!mounted) return;
+
     try {
-      final path = await BackupService.exportToFile();
+      final path = await BackupService.exportToFile(passphrase);
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Sauvegarde créée : $path')),
@@ -134,7 +177,25 @@ class _SettingsScreenState extends State<SettingsScreen> {
     if (confirmed != true) return;
     if (!mounted) return;
 
-    await BackupService.restoreFromFile(selected);
+    String? passphrase;
+    if (await BackupService.isEncrypted(selected)) {
+      passphrase = await _askPassphrase(
+        title: 'Sauvegarde chiffrée',
+        helperText: 'Phrase de passe saisie à la création de ce fichier.',
+      );
+      if (passphrase == null || passphrase.isEmpty) return;
+      if (!mounted) return;
+    }
+
+    try {
+      await BackupService.restoreFromFile(selected, passphrase: passphrase);
+    } on BackupPassphraseError catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(e.message)),
+      );
+      return;
+    }
     if (!mounted) return;
     await loadAccountData(context);
     if (!mounted) return;

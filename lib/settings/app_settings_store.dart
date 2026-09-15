@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:hive/hive.dart';
 
+import 'secure_key_store.dart';
+
 /// Choix d'apparence de l'app. "custom" suit la luminosité du système
 /// (clair/sombre automatique) mais avec une couleur d'accent au choix au
 /// lieu de la couleur par défaut.
@@ -12,9 +14,9 @@ class AppSettingsStore {
   static late Box _box;
 
   static Future<void> init() async {
-    _box = Hive.isBoxOpen(_boxName)
-        ? Hive.box(_boxName)
-        : await Hive.openBox(_boxName);
+    // Chiffré au repos (clé dans le stockage sécurisé de l'OS) — cette
+    // boîte contient notamment la clé API Finnhub de l'utilisateur.
+    _box = await SecureKeyStore.openEncryptedBox(_boxName);
 
     themeChoiceNotifier.value = _readThemeChoice();
     accentColorNotifier.value = _readAccentColor();
