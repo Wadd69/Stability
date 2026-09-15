@@ -47,6 +47,17 @@ void main() async {
     url: SupabaseConfig.url,
     publishableKey: SupabaseConfig.anonKey,
   );
+  // Doit démarrer ici, avant runApp : sur le web, le SDK détecte un lien
+  // de récupération de mot de passe dans l'URL dès `initialize`, bien
+  // avant qu'AppRoot n'ait la moindre chance de se monter et de s'abonner
+  // lui-même (l'écran de lancement tourne encore plusieurs secondes).
+  AuthRepository.startListeningForPasswordRecovery();
+  // Filet de sécurité : si `initialize` a déjà consommé l'évènement avant
+  // même cet abonnement (le Stream broadcast ne le rejoue pas), on
+  // retrouve l'information directement dans l'URL du navigateur.
+  if (Uri.base.toString().contains('type=recovery')) {
+    AuthRepository.isPasswordRecovery.value = true;
+  }
 
   runApp(const StabilityApp());
 }
@@ -160,17 +171,25 @@ class AppRootState extends State<AppRoot> {
   @override
   void initState() {
     super.initState();
+    _isPasswordRecovery = AuthRepository.isPasswordRecovery.value;
     _load();
     AuthRepository.onAuthStateChange.listen((state) {
-      if (state.event == AuthChangeEvent.passwordRecovery) {
-        // Lien de réinitialisation cliqué : une session temporaire est
-        // active, mais il ne faut pas laisser passer vers le dashboard
-        // avant que l'utilisateur ait choisi un nouveau mot de passe.
-        setState(() => _isPasswordRecovery = true);
-        return;
-      }
+      if (state.event == AuthChangeEvent.passwordRecovery) return;
       _load();
     });
+    AuthRepository.isPasswordRecovery.addListener(_onRecoveryChanged);
+  }
+
+  @override
+  void dispose() {
+    AuthRepository.isPasswordRecovery.removeListener(_onRecoveryChanged);
+    super.dispose();
+  }
+
+  void _onRecoveryChanged() {
+    if (mounted) {
+      setState(() => _isPasswordRecovery = AuthRepository.isPasswordRecovery.value);
+    }
   }
 
   Future<void> _load() async {
@@ -222,7 +241,7 @@ class AppRootState extends State<AppRoot> {
     if (_isPasswordRecovery) {
       return ResetPasswordScreen(
         onDone: () {
-          setState(() => _isPasswordRecovery = false);
+          AuthRepository.isPasswordRecovery.value = false;
           _load();
         },
       );

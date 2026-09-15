@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 /// Encapsule l'authentification Supabase (email + mot de passe).
@@ -9,6 +10,24 @@ class AuthRepository {
 
   static Stream<AuthState> get onAuthStateChange =>
       _client.auth.onAuthStateChange;
+
+  /// Vrai dès qu'une session de récupération de mot de passe est détectée
+  /// (lien cliqué dans l'email envoyé par [resetPasswordForEmail]). Doit
+  /// être écouté dès `main()`, juste après `Supabase.initialize` — c'est à
+  /// ce moment que le SDK détecte le lien dans l'URL (web) et émet
+  /// l'évènement, potentiellement bien avant qu'un widget n'ait eu la
+  /// chance de s'abonner au flux (l'écran de lancement peut encore
+  /// tourner plusieurs secondes) ; s'abonner plus tard raterait
+  /// l'évènement, un `Stream` broadcast ne le rejouant pas.
+  static final ValueNotifier<bool> isPasswordRecovery = ValueNotifier(false);
+
+  static void startListeningForPasswordRecovery() {
+    onAuthStateChange.listen((state) {
+      if (state.event == AuthChangeEvent.passwordRecovery) {
+        isPasswordRecovery.value = true;
+      }
+    });
+  }
 
   static Future<void> signUp({
     required String email,
@@ -44,5 +63,17 @@ class AuthRepository {
   /// `AuthChangeEvent.passwordRecovery`).
   static Future<void> updatePassword(String newPassword) async {
     await _client.auth.updateUser(UserAttributes(password: newPassword));
+  }
+
+  /// Supprime définitivement le compte de connexion (et, par cascade côté
+  /// base de données, les lignes qui en dépendent : profil, appartenance
+  /// aux comptes partagés, etc.) — appelle la fonction Postgres
+  /// `delete_own_account`, à créer côté Supabase (SQL fourni dans
+  /// l'aide de l'écran "Compte & sécurité") : une suppression aussi
+  /// sensible ne doit jamais passer par une clé cliente élevée, seulement
+  /// par une fonction serveur restreinte à `auth.uid()`.
+  static Future<void> deleteOwnAccount() async {
+    await _client.rpc('delete_own_account');
+    await signOut();
   }
 }

@@ -1,10 +1,15 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
-/// Changement du mot de passe ou de l'email de connexion (le compte
-/// d'authentification, pas un "compte" Stability). Chaque changement est
-/// confirmé avant envoi : mot de passe saisi deux fois, email confirmé par
-/// une boîte de dialogue.
+import '../backend/auth_repository.dart';
+import '../accounts/current_account.dart';
+import '../theme/app_colors.dart';
+
+/// Changement du mot de passe, de l'email de connexion ou du nom
+/// d'utilisateur (le compte d'authentification, pas un "compte"
+/// Stability), et suppression définitive du compte. Chaque changement
+/// est confirmé avant envoi : mot de passe saisi deux fois, email/
+/// suppression confirmés par une boîte de dialogue.
 class AccountSecurityScreen extends StatefulWidget {
   const AccountSecurityScreen({super.key});
 
@@ -15,25 +20,162 @@ class AccountSecurityScreen extends StatefulWidget {
 class _AccountSecurityScreenState extends State<AccountSecurityScreen> {
   final _passwordFormKey = GlobalKey<FormState>();
   final _emailFormKey = GlobalKey<FormState>();
+  final _nameFormKey = GlobalKey<FormState>();
 
   final _newPasswordController = TextEditingController();
   final _confirmPasswordController = TextEditingController();
   final _newEmailController = TextEditingController();
+  final _displayNameController = TextEditingController();
 
   bool _obscurePassword = true;
   bool _savingPassword = false;
   bool _savingEmail = false;
+  bool _savingName = false;
+  bool _deleting = false;
   String? _passwordError;
   String? _passwordSuccess;
   String? _emailError;
   String? _emailSuccess;
+  String? _nameError;
+  String? _nameSuccess;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadDisplayName();
+  }
+
+  Future<void> _loadDisplayName() async {
+    final userId = Supabase.instance.client.auth.currentUser?.id;
+    if (userId == null) return;
+    try {
+      final row = await Supabase.instance.client
+          .from('profiles')
+          .select('display_name')
+          .eq('id', userId)
+          .maybeSingle();
+      if (!mounted) return;
+      setState(() {
+        _displayNameController.text = row?['display_name'] as String? ?? '';
+      });
+    } catch (_) {
+      // Non bloquant : le champ reste vide, l'utilisateur peut quand même
+      // en saisir un.
+    }
+  }
 
   @override
   void dispose() {
     _newPasswordController.dispose();
     _confirmPasswordController.dispose();
     _newEmailController.dispose();
+    _displayNameController.dispose();
     super.dispose();
+  }
+
+  Future<void> _changeDisplayName() async {
+    if (!_nameFormKey.currentState!.validate()) return;
+    final userId = Supabase.instance.client.auth.currentUser?.id;
+    if (userId == null) return;
+
+    setState(() {
+      _savingName = true;
+      _nameError = null;
+      _nameSuccess = null;
+    });
+
+    try {
+      await Supabase.instance.client.from('profiles').update({
+        'display_name': _displayNameController.text.trim(),
+      }).eq('id', userId);
+      if (!mounted) return;
+      setState(() {
+        _nameSuccess = 'Nom mis à jour.';
+        _savingName = false;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _nameError = 'Erreur : ${e.toString()}';
+        _savingName = false;
+      });
+    }
+  }
+
+  Future<void> _deleteAccount() async {
+    final controller = TextEditingController();
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (_) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          title: const Text('Supprimer définitivement le compte'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                'Cette action est irréversible : votre connexion et vos '
+                'données personnelles seront définitivement supprimées. '
+                'Tapez SUPPRIMER pour confirmer.',
+              ),
+              const SizedBox(height: 16),
+              TextField(
+                controller: controller,
+                autofocus: true,
+                decoration: const InputDecoration(labelText: 'SUPPRIMER'),
+                onChanged: (_) => setDialogState(() {}),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('Annuler'),
+            ),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: context.appColors.negative,
+              ),
+              onPressed: controller.text.trim() == 'SUPPRIMER'
+                  ? () => Navigator.pop(context, true)
+                  : null,
+              child: const Text('Supprimer'),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (confirmed != true) return;
+    if (!mounted) return;
+
+    setState(() => _deleting = true);
+
+    try {
+      await AuthRepository.deleteOwnAccount();
+      CurrentAccount.clear();
+      if (!mounted) return;
+      Navigator.of(context).popUntil((r) => r.isFirst);
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _deleting = false);
+      showDialog(
+        context: context,
+        builder: (_) => AlertDialog(
+          title: const Text('Échec de la suppression'),
+          content: Text(
+            '${e.toString()}\n\n'
+            'La fonction "delete_own_account" doit être créée côté '
+            'Supabase — voir l\'aide de cet écran pour le SQL à exécuter.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('OK'),
+            ),
+          ],
+        ),
+      );
+    }
   }
 
   Future<void> _changePassword() async {
@@ -132,6 +274,58 @@ class _AccountSecurityScreenState extends State<AccountSecurityScreen> {
             style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
           ),
           const SizedBox(height: 24),
+          Text(
+            'Nom d\'utilisateur',
+            style: TextStyle(
+              fontSize: 16,
+              fontWeight: FontWeight.w600,
+              color: Theme.of(context).colorScheme.onSurface,
+            ),
+          ),
+          const SizedBox(height: 12),
+          Form(
+            key: _nameFormKey,
+            child: Column(
+              children: [
+                TextFormField(
+                  controller: _displayNameController,
+                  decoration: const InputDecoration(labelText: 'Nom affiché'),
+                  validator: (v) => (v == null || v.trim().isEmpty)
+                      ? 'Nom requis'
+                      : null,
+                ),
+                if (_nameError != null) ...[
+                  const SizedBox(height: 12),
+                  Text(
+                    _nameError!,
+                    style:
+                        TextStyle(color: Theme.of(context).colorScheme.error),
+                  ),
+                ],
+                if (_nameSuccess != null) ...[
+                  const SizedBox(height: 12),
+                  Text(_nameSuccess!),
+                ],
+                const SizedBox(height: 16),
+                SizedBox(
+                  width: double.infinity,
+                  child: OutlinedButton(
+                    onPressed: _savingName ? null : _changeDisplayName,
+                    child: _savingName
+                        ? const SizedBox(
+                            width: 20,
+                            height: 20,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : const Text('Mettre à jour le nom'),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 40),
+          const Divider(),
+          const SizedBox(height: 16),
           Text(
             'Changer le mot de passe',
             style: TextStyle(
@@ -256,6 +450,44 @@ class _AccountSecurityScreenState extends State<AccountSecurityScreen> {
                   ),
                 ),
               ],
+            ),
+          ),
+          const SizedBox(height: 40),
+          const Divider(),
+          const SizedBox(height: 16),
+          Text(
+            'Zone de danger',
+            style: TextStyle(
+              fontSize: 16,
+              fontWeight: FontWeight.w600,
+              color: context.appColors.negative,
+            ),
+          ),
+          const SizedBox(height: 8),
+          const Text(
+            'Supprime définitivement votre compte de connexion et vos '
+            'données personnelles. Irréversible.',
+            style: TextStyle(fontSize: 12, color: Colors.grey),
+          ),
+          const SizedBox(height: 16),
+          SizedBox(
+            width: double.infinity,
+            child: OutlinedButton(
+              style: OutlinedButton.styleFrom(
+                foregroundColor: context.appColors.negative,
+                side: BorderSide(color: context.appColors.negative),
+              ),
+              onPressed: _deleting ? null : _deleteAccount,
+              child: _deleting
+                  ? SizedBox(
+                      width: 20,
+                      height: 20,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: context.appColors.negative,
+                      ),
+                    )
+                  : const Text('Supprimer mon compte'),
             ),
           ),
         ],
