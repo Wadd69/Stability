@@ -8,6 +8,7 @@ import 'backend/auth_repository.dart';
 import 'backend/cloud_account.dart';
 import 'backend/cloud_accounts_repository.dart';
 import 'accounts/auth_screen.dart';
+import 'accounts/reset_password_screen.dart';
 import 'onboarding/welcome_screen.dart';
 import 'onboarding/splash_screen.dart';
 
@@ -153,13 +154,23 @@ class AppRoot extends StatefulWidget {
 
 class AppRootState extends State<AppRoot> {
   bool _loading = true;
+  bool _isPasswordRecovery = false;
   List<CloudAccount> _accounts = [];
 
   @override
   void initState() {
     super.initState();
     _load();
-    AuthRepository.onAuthStateChange.listen((_) => _load());
+    AuthRepository.onAuthStateChange.listen((state) {
+      if (state.event == AuthChangeEvent.passwordRecovery) {
+        // Lien de réinitialisation cliqué : une session temporaire est
+        // active, mais il ne faut pas laisser passer vers le dashboard
+        // avant que l'utilisateur ait choisi un nouveau mot de passe.
+        setState(() => _isPasswordRecovery = true);
+        return;
+      }
+      _load();
+    });
   }
 
   Future<void> _load() async {
@@ -205,6 +216,14 @@ class AppRootState extends State<AppRoot> {
         onContinue: () {
           AppSettingsStore.setHasSeenWelcome(true);
           setState(() {});
+        },
+      );
+    }
+    if (_isPasswordRecovery) {
+      return ResetPasswordScreen(
+        onDone: () {
+          setState(() => _isPasswordRecovery = false);
+          _load();
         },
       );
     }

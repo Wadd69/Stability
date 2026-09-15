@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../backend/auth_repository.dart';
+import '../backend/supabase_config.dart';
 
 class AuthScreen extends StatefulWidget {
   final VoidCallback onAuthenticated;
@@ -74,6 +75,56 @@ class _AuthScreenState extends State<AuthScreen> {
     if (mounted) setState(() => _loading = false);
   }
 
+  Future<void> _forgotPassword() async {
+    final controller = TextEditingController(text: _emailController.text);
+    final email = await showDialog<String>(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: const Text('Mot de passe oublié'),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          keyboardType: TextInputType.emailAddress,
+          decoration: const InputDecoration(
+            labelText: 'Email',
+            helperText: 'On vous envoie un lien pour choisir un nouveau '
+                'mot de passe.',
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Annuler'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(context, controller.text.trim()),
+            child: const Text('Envoyer'),
+          ),
+        ],
+      ),
+    );
+
+    if (email == null || email.isEmpty || !email.contains('@')) return;
+    if (!mounted) return;
+
+    try {
+      await AuthRepository.resetPasswordForEmail(
+        email,
+        redirectTo: SupabaseConfig.passwordResetRedirectUrl,
+      );
+      if (!mounted) return;
+      setState(() {
+        _error = null;
+        _info = 'Si un compte existe avec cet email, un lien de '
+            'réinitialisation vient d\'être envoyé (pensez à vérifier vos '
+            'spams).';
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _error = 'Échec : ${e.toString()}');
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -129,7 +180,16 @@ class _AuthScreenState extends State<AuthScreen> {
                         ? '6 caractères minimum'
                         : null,
                   ),
-                  const SizedBox(height: 24),
+                  if (!_isSignUp) ...[
+                    Align(
+                      alignment: Alignment.centerRight,
+                      child: TextButton(
+                        onPressed: _loading ? null : _forgotPassword,
+                        child: const Text('Mot de passe oublié ?'),
+                      ),
+                    ),
+                  ] else
+                    const SizedBox(height: 24),
                   if (_error != null) ...[
                     Text(
                       _error!,
