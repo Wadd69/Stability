@@ -77,3 +77,45 @@ class AuthRepository {
     await signOut();
   }
 }
+
+/// Traduit une erreur d'authentification en message lisible côté écran, à
+/// la place du texte technique brut de l'exception (ex: "Invalid login
+/// credentials" → "Email ou mot de passe incorrect."). Les codes viennent
+/// de https://supabase.com/docs/guides/auth/debugging/error-codes — ceux
+/// non listés ici retombent sur le message générique de Supabase, déjà
+/// écrit pour un humain côté serveur.
+String friendlyAuthErrorMessage(Object error) {
+  if (error is AuthException) {
+    switch (error.code) {
+      case 'invalid_credentials':
+        return 'Email ou mot de passe incorrect.';
+      case 'email_not_confirmed':
+        return 'Confirmez votre email avant de vous connecter '
+            '(vérifiez vos spams).';
+      case 'user_already_exists':
+      case 'email_exists':
+        return 'Un compte existe déjà avec cet email.';
+      case 'user_not_found':
+        return 'Aucun compte ne correspond à cet email.';
+      case 'weak_password':
+        return 'Mot de passe trop faible : choisissez-en un plus long ou '
+            'plus complexe.';
+      case 'same_password':
+        return 'Le nouveau mot de passe doit être différent de l\'ancien.';
+      case 'over_email_send_rate_limit':
+      case 'over_request_rate_limit':
+        return 'Trop de tentatives. Réessayez dans quelques minutes.';
+    }
+
+    if (error is AuthRetryableFetchException ||
+        error.message.contains('SocketException') ||
+        error.message.contains('Failed host lookup')) {
+      return 'Impossible de contacter le serveur. Vérifiez votre '
+          'connexion internet.';
+    }
+
+    return error.message;
+  }
+
+  return 'Une erreur est survenue. Réessayez.';
+}

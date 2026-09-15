@@ -201,7 +201,7 @@ class _AccountSecurityScreenState extends State<AccountSecurityScreen> {
     } catch (e) {
       if (!mounted) return;
       setState(() {
-        _passwordError = 'Erreur : ${e.toString()}';
+        _passwordError = friendlyAuthErrorMessage(e);
         _savingPassword = false;
       });
     }
@@ -254,7 +254,7 @@ class _AccountSecurityScreenState extends State<AccountSecurityScreen> {
     } catch (e) {
       if (!mounted) return;
       setState(() {
-        _emailError = 'Erreur : ${e.toString()}';
+        _emailError = friendlyAuthErrorMessage(e);
         _savingEmail = false;
       });
     }

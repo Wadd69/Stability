@@ -66,7 +66,7 @@ class _AuthScreenState extends State<AuthScreen> {
       widget.onAuthenticated();
     } catch (e) {
       setState(() {
-        _error = 'Échec : ${e.toString()}';
+        _error = friendlyAuthErrorMessage(e);
         _loading = false;
       });
       return;
@@ -121,7 +121,7 @@ class _AuthScreenState extends State<AuthScreen> {
       });
     } catch (e) {
       if (!mounted) return;
-      setState(() => _error = 'Échec : ${e.toString()}');
+      setState(() => _error = friendlyAuthErrorMessage(e));
     }
   }
 

@@ -43,7 +43,7 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
       widget.onDone();
     } catch (e) {
       setState(() {
-        _error = 'Échec : ${e.toString()}';
+        _error = friendlyAuthErrorMessage(e);
         _loading = false;
       });
     }
