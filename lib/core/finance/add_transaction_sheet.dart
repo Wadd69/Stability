@@ -3,7 +3,11 @@ import 'package:provider/provider.dart';
 import 'package:stability/core/finance/finance.dart';
 import 'package:stability/core/finance/active_month_store.dart';
 
+import '../containers/container_model.dart';
 import '../containers/containers_store.dart';
+import '../budget_rules/budget_automation_service.dart';
+import '../../backend/auth_repository.dart';
+import '../../equity/account_members_store.dart';
 
 import 'categories_store.dart';
 import 'categories_screen.dart';
@@ -66,6 +70,7 @@ class _AddTransactionSheetState extends State<AddTransactionSheet> {
   String? _selectedCategoryId;
   String? _sourceContainerId;
   String? _destinationContainerId;
+  String? _paidByUserId;
 
   bool _isSplit = false;
   final List<_SplitLine> _splitLines = [];
@@ -100,6 +105,7 @@ class _AddTransactionSheetState extends State<AddTransactionSheet> {
     _selectedCategoryId = existing?.category;
     _sourceContainerId = existing?.containerId ?? widget.initialContainerId;
     _destinationContainerId = null;
+    _paidByUserId = existing?.paidByUserId ?? AuthRepository.currentUser?.id;
 
     if (_isTransfer && existing?.transferId != null) {
       final legs = TransactionsStore.all
@@ -214,7 +220,8 @@ class _AddTransactionSheetState extends State<AddTransactionSheet> {
 
   double get _splitTotal {
     return _splitLines.fold<double>(0, (sum, line) {
-      final v = double.tryParse(line.amountController.text.replaceAll(',', '.'));
+      final v =
+          double.tryParse(line.amountController.text.replaceAll(',', '.'));
       return sum + (v ?? 0);
     });
   }
@@ -411,6 +418,13 @@ class _AddTransactionSheetState extends State<AddTransactionSheet> {
     }
 
     // ── DESTINATION ──
+    // La réduction du capital restant dû (support "Crédit") ne s'applique
+    // qu'à la création d'un nouveau virement, jamais en édition — sinon
+    // modifier le montant d'un virement existant la déclencherait à
+    // nouveau et fausserait le capital restant (déjà réduit une première
+    // fois lors de la création).
+    final isNewTransfer = widget.existing == null;
+    final containersStore = context.read<ContainersStore>();
     if (_isDestSplit) {
       final dstSplitGroupId = '${transferId}_dst';
       for (int j = 0; j < _destLegLines.length; j++) {
@@ -429,13 +443,21 @@ class _AddTransactionSheetState extends State<AddTransactionSheet> {
             monthKey: monthKey,
           ),
         );
+        if (isNewTransfer) {
+          await BudgetAutomationService.applyCreditRepayment(
+            containersStore,
+            line.containerId,
+            line.amount,
+          );
+        }
       }
     } else {
+      final destAmount = bothSplit ? destTotal : sourceTotal;
       await TransactionsStore.add(
         Transaction(
           id: '${transferId}_in',
           label: label,
-          amount: bothSplit ? destTotal : sourceTotal,
+          amount: destAmount,
           date: _selectedDate,
           type: TransactionType.income,
           category: _selectedCategoryId,
@@ -444,6 +466,13 @@ class _AddTransactionSheetState extends State<AddTransactionSheet> {
           monthKey: monthKey,
         ),
       );
+      if (isNewTransfer) {
+        await BudgetAutomationService.applyCreditRepayment(
+          containersStore,
+          _destinationContainerId,
+          destAmount,
+        );
+      }
     }
 
     if (!mounted) return;
@@ -501,6 +530,7 @@ class _AddTransactionSheetState extends State<AddTransactionSheet> {
             containerId: _sourceContainerId,
             splitGroupId: splitGroupId,
             monthKey: monthKey,
+            paidByUserId: _paidByUserId,
           ),
         );
       }
@@ -510,8 +540,7 @@ class _AddTransactionSheetState extends State<AddTransactionSheet> {
       return;
     }
 
-    final amount =
-        double.parse(_amountController.text.replaceAll(',', '.'));
+    final amount = double.parse(_amountController.text.replaceAll(',', '.'));
 
     // ─────────────────────────────────────────
     // ➕ ENTRÉE / ➖ SORTIE CLASSIQUE
@@ -527,6 +556,7 @@ class _AddTransactionSheetState extends State<AddTransactionSheet> {
           category: _selectedCategoryId,
           containerId: _sourceContainerId,
           monthKey: monthKey,
+          paidByUserId: _paidByUserId,
         ),
       );
     } else if (widget.existing!.splitGroupId != null) {
@@ -542,6 +572,7 @@ class _AddTransactionSheetState extends State<AddTransactionSheet> {
           category: _selectedCategoryId,
           containerId: _sourceContainerId,
           monthKey: monthKey,
+          paidByUserId: _paidByUserId,
         ),
       );
     } else {
@@ -552,6 +583,7 @@ class _AddTransactionSheetState extends State<AddTransactionSheet> {
           date: _selectedDate,
           category: _selectedCategoryId,
           containerId: _sourceContainerId,
+          paidByUserId: _paidByUserId,
         ),
       );
     }
@@ -560,10 +592,46 @@ class _AddTransactionSheetState extends State<AddTransactionSheet> {
     Navigator.pop(context);
   }
 
+  /// Items d'un sélecteur de support — inclut toujours la valeur
+  /// sélectionnée même si le support a été archivé depuis (sinon
+  /// `DropdownButtonFormField` plante avec une assertion "value not in
+  /// items" à l'édition d'une ancienne transaction).
+  List<DropdownMenuItem<String?>> _containerItems(
+    List<ContainerModel> active,
+    String? selectedId,
+  ) {
+    final items = active
+        .map(
+          (c) => DropdownMenuItem<String?>(
+            value: c.id,
+            child: Text(c.name, overflow: TextOverflow.ellipsis),
+          ),
+        )
+        .toList();
+
+    if (selectedId != null && !active.any((c) => c.id == selectedId)) {
+      final all = context.read<ContainersStore>().all;
+      String label = 'Support supprimé';
+      try {
+        label = '${all.firstWhere((c) => c.id == selectedId).name} (archivé)';
+      } catch (_) {
+        // Support totalement supprimé, pas seulement archivé.
+      }
+      items.add(
+        DropdownMenuItem<String?>(
+          value: selectedId,
+          child: Text(label, overflow: TextOverflow.ellipsis),
+        ),
+      );
+    }
+
+    return items;
+  }
+
   Widget _transferLegLineRow({
     required _TransferLegLine line,
     required List categories,
-    required List containers,
+    required List<ContainerModel> containers,
     required bool showCategory,
     required VoidCallback onRemove,
     required bool canRemove,
@@ -576,13 +644,10 @@ class _AddTransactionSheetState extends State<AddTransactionSheet> {
           Expanded(
             flex: showCategory ? 2 : 3,
             child: DropdownButtonFormField<String?>(
+              isExpanded: true,
               initialValue: line.containerId,
               decoration: const InputDecoration(labelText: 'Support'),
-              items: containers
-                  .map<DropdownMenuItem<String?>>(
-                    (c) => DropdownMenuItem(value: c.id, child: Text(c.name)),
-                  )
-                  .toList(),
+              items: _containerItems(containers, line.containerId),
               onChanged: (value) => setState(() => line.containerId = value),
             ),
           ),
@@ -591,12 +656,15 @@ class _AddTransactionSheetState extends State<AddTransactionSheet> {
             Expanded(
               flex: 2,
               child: DropdownButtonFormField<String?>(
+                isExpanded: true,
                 initialValue: line.categoryId,
                 decoration: const InputDecoration(labelText: 'Catégorie'),
                 items: [
                   const DropdownMenuItem(value: null, child: Text('Aucune')),
                   ...categories.map<DropdownMenuItem<String?>>(
-                    (c) => DropdownMenuItem(value: c.id, child: Text(c.name)),
+                    (c) => DropdownMenuItem(
+                        value: c.id,
+                        child: Text(c.name, overflow: TextOverflow.ellipsis)),
                   ),
                 ],
                 onChanged: (value) => setState(() => line.categoryId = value),
@@ -608,7 +676,8 @@ class _AddTransactionSheetState extends State<AddTransactionSheet> {
             flex: 2,
             child: TextFormField(
               controller: line.amountController,
-              keyboardType: const TextInputType.numberWithOptions(decimal: true),
+              keyboardType:
+                  const TextInputType.numberWithOptions(decimal: true),
               decoration: const InputDecoration(labelText: 'Montant'),
               onChanged: (_) => setState(() => _transferError = null),
             ),
@@ -634,341 +703,367 @@ class _AddTransactionSheetState extends State<AddTransactionSheet> {
             ? 'Nouvelle entrée'
             : 'Nouvelle sortie';
 
-    return Padding(
-      padding: EdgeInsets.only(
-        bottom: MediaQuery.of(context).viewInsets.bottom,
-        left: 16,
-        right: 16,
-        top: 16,
+    return ConstrainedBox(
+      // Hauteur plafonnée volontairement, même quand le clavier est
+      // fermé : certains claviers/launchers (Xiaomi HyperOS notamment)
+      // rapportent un espace disponible incorrect une fois le clavier
+      // ouvert, ce qui peut laisser le bouton "Enregistrer" hors champ
+      // sans que la zone ne devienne scrollable. En forçant une hauteur
+      // maximale ici, le SingleChildScrollView est toujours réellement
+      // scrollable, quel que soit ce que rapporte l'OS sur le clavier.
+      constraints: BoxConstraints(
+        maxHeight: MediaQuery.of(context).size.height * 0.9,
       ),
-      child: SingleChildScrollView(
-        child: Form(
-          key: _formKey,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(
-                title,
-                style: const TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-              const SizedBox(height: 16),
-
-              TextFormField(
-                controller: _labelController,
-                decoration: const InputDecoration(labelText: 'Libellé'),
-              ),
-              const SizedBox(height: 12),
-
-              if (!isTransfer)
-                SwitchListTile(
-                  contentPadding: EdgeInsets.zero,
-                  title: const Text('Diviser sur plusieurs catégories'),
-                  value: _isSplit,
-                  onChanged: _toggleSplit,
-                ),
-
-              if (isTransfer) ...[
-                SwitchListTile(
-                  contentPadding: EdgeInsets.zero,
-                  title: const Text('Diviser la source (plusieurs supports)'),
-                  value: _isSourceSplit,
-                  onChanged: _toggleSourceSplit,
-                ),
-                SwitchListTile(
-                  contentPadding: EdgeInsets.zero,
-                  title: const Text(
-                      'Diviser la destination (plusieurs supports/catégories)'),
-                  value: _isDestSplit,
-                  onChanged: _toggleDestSplit,
-                ),
-              ],
-
-              if (!_isSplit && !(isTransfer && (_isSourceSplit || _isDestSplit))) ...[
-                TextFormField(
-                  controller: _amountController,
-                  keyboardType:
-                      const TextInputType.numberWithOptions(decimal: true),
-                  decoration: const InputDecoration(labelText: 'Montant'),
-                  validator: (v) =>
-                      v == null || v.isEmpty ? 'Champ requis' : null,
-                ),
-                const SizedBox(height: 12),
-              ],
-
-              if (isTransfer && (_isSourceSplit || _isDestSplit)) ...[
-                Align(
-                  alignment: Alignment.centerLeft,
-                  child: Text(
-                    _isSourceSplit && _isDestSplit
-                        ? 'Source : ${_sourceLegTotal.toStringAsFixed(2)} € · '
-                            'Destination : ${_destLegTotal.toStringAsFixed(2)} €'
-                        : 'Total : ${(_isSourceSplit ? _sourceLegTotal : _destLegTotal).toStringAsFixed(2)} €',
-                    style: const TextStyle(fontWeight: FontWeight.bold),
-                  ),
-                ),
-                const SizedBox(height: 12),
-              ],
-
-              if (!isTransfer)
-                DropdownButtonFormField<String?>(
-                  initialValue: _sourceContainerId,
-                  decoration:
-                      const InputDecoration(labelText: 'Conteneur (optionnel)'),
-                  items: [
-                    const DropdownMenuItem(value: null, child: Text('Aucun')),
-                    ...containers.map(
-                      (c) => DropdownMenuItem(value: c.id, child: Text(c.name)),
-                    ),
-                  ],
-                  onChanged: (value) {
-                    setState(() => _sourceContainerId = value);
-                  },
-                ),
-
-              if (isTransfer && !_isSourceSplit) ...[
-                DropdownButtonFormField<String?>(
-                  initialValue: _sourceContainerId,
-                  decoration: const InputDecoration(labelText: 'Support source'),
-                  items: containers
-                      .map(
-                        (c) => DropdownMenuItem(value: c.id, child: Text(c.name)),
-                      )
-                      .toList(),
-                  onChanged: (value) {
-                    setState(() => _sourceContainerId = value);
-                  },
-                  validator: (v) => v == null ? 'Support source requis' : null,
-                ),
-                const SizedBox(height: 12),
-              ],
-
-              if (isTransfer && _isSourceSplit) ...[
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    ..._sourceLegLines.map(
-                      (line) => _transferLegLineRow(
-                        line: line,
-                        categories: categories,
-                        containers: containers,
-                        showCategory: false,
-                        onRemove: () => _removeSourceLegLine(line),
-                        canRemove: _sourceLegLines.length > 2,
-                      ),
-                    ),
-                    TextButton.icon(
-                      onPressed: _addSourceLegLine,
-                      icon: const Icon(Icons.add),
-                      label: const Text('Ajouter un support source'),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 12),
-              ],
-
-              if (isTransfer && !_isDestSplit) ...[
-                DropdownButtonFormField<String?>(
-                  initialValue: _destinationContainerId,
-                  decoration: const InputDecoration(
-                    labelText: 'Support destination',
-                  ),
-                  items: containers
-                      .where((c) => c.id != _sourceContainerId)
-                      .map(
-                        (c) => DropdownMenuItem(value: c.id, child: Text(c.name)),
-                      )
-                      .toList(),
-                  onChanged: (value) {
-                    setState(() => _destinationContainerId = value);
-                  },
-                  validator: (v) =>
-                      v == null ? 'Support destination requis' : null,
-                ),
-                const SizedBox(height: 12),
-              ],
-
-              if (isTransfer && _isDestSplit) ...[
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    ..._destLegLines.map(
-                      (line) => _transferLegLineRow(
-                        line: line,
-                        categories: categories,
-                        containers: containers,
-                        showCategory: true,
-                        onRemove: () => _removeDestLegLine(line),
-                        canRemove: _destLegLines.length > 2,
-                      ),
-                    ),
-                    TextButton.icon(
-                      onPressed: _addDestLegLine,
-                      icon: const Icon(Icons.add),
-                      label: const Text('Ajouter une destination'),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 12),
-              ],
-
-              if (_transferError != null) ...[
+      child: Padding(
+        padding: EdgeInsets.only(
+          bottom: MediaQuery.of(context).viewInsets.bottom + 24,
+          left: 16,
+          right: 16,
+          top: 16,
+        ),
+        child: SingleChildScrollView(
+          child: Form(
+            key: _formKey,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
                 Text(
-                  _transferError!,
-                  style: TextStyle(color: Theme.of(context).colorScheme.error),
+                  title,
+                  style: const TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                const SizedBox(height: 16),
+                TextFormField(
+                  controller: _labelController,
+                  decoration: const InputDecoration(labelText: 'Libellé'),
                 ),
                 const SizedBox(height: 12),
-              ],
-
-              if (!_isSplit && !(isTransfer && (_isSourceSplit || _isDestSplit)))
-                DropdownButtonFormField<String?>(
-                  initialValue: _selectedCategoryId,
-                  decoration: const InputDecoration(
-                      labelText: 'Catégorie (optionnel)'),
-                  items: [
-                    const DropdownMenuItem(
-                      value: null,
-                      child: Text('Aucune'),
+                if (!isTransfer)
+                  SwitchListTile(
+                    contentPadding: EdgeInsets.zero,
+                    title: const Text('Diviser sur plusieurs catégories'),
+                    value: _isSplit,
+                    onChanged: _toggleSplit,
+                  ),
+                if (isTransfer) ...[
+                  SwitchListTile(
+                    contentPadding: EdgeInsets.zero,
+                    title: const Text('Diviser la source (plusieurs supports)'),
+                    value: _isSourceSplit,
+                    onChanged: _toggleSourceSplit,
+                  ),
+                  SwitchListTile(
+                    contentPadding: EdgeInsets.zero,
+                    title: const Text(
+                        'Diviser la destination (plusieurs supports/catégories)'),
+                    value: _isDestSplit,
+                    onChanged: _toggleDestSplit,
+                  ),
+                ],
+                if (!_isSplit &&
+                    !(isTransfer && (_isSourceSplit || _isDestSplit))) ...[
+                  TextFormField(
+                    controller: _amountController,
+                    keyboardType:
+                        const TextInputType.numberWithOptions(decimal: true),
+                    decoration: const InputDecoration(labelText: 'Montant'),
+                    validator: (v) =>
+                        v == null || v.isEmpty ? 'Champ requis' : null,
+                  ),
+                  const SizedBox(height: 12),
+                ],
+                if (isTransfer && (_isSourceSplit || _isDestSplit)) ...[
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: Text(
+                      _isSourceSplit && _isDestSplit
+                          ? 'Source : ${_sourceLegTotal.toStringAsFixed(2)} € · '
+                              'Destination : ${_destLegTotal.toStringAsFixed(2)} €'
+                          : 'Total : ${(_isSourceSplit ? _sourceLegTotal : _destLegTotal).toStringAsFixed(2)} €',
+                      style: const TextStyle(fontWeight: FontWeight.bold),
                     ),
-                    ...categories.map(
-                      (c) => DropdownMenuItem(
-                        value: c.id,
-                        child: Text(c.name),
-                      ),
-                    ),
-                    const DropdownMenuItem(
-                      value: '__manage__',
-                      child: Text('➕ Gérer les catégories'),
-                    ),
-                  ],
-                  onChanged: (value) {
-                    if (value == '__manage__') {
-                      _openCategoriesManager();
-                    } else {
-                      setState(() {
-                        _selectedCategoryId = value;
-                      });
-                    }
-                  },
-                )
-              else if (!isTransfer)
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    ..._splitLines.map((line) {
-                      return Padding(
-                        padding: const EdgeInsets.only(bottom: 8),
-                        child: Row(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Expanded(
-                              flex: 3,
-                              child: DropdownButtonFormField<String?>(
-                                initialValue: line.categoryId,
-                                decoration: const InputDecoration(
-                                  labelText: 'Catégorie',
-                                ),
-                                items: [
-                                  const DropdownMenuItem(
-                                    value: null,
-                                    child: Text('Aucune'),
-                                  ),
-                                  ...categories.map(
-                                    (c) => DropdownMenuItem(
-                                      value: c.id,
-                                      child: Text(c.name),
-                                    ),
-                                  ),
-                                ],
-                                onChanged: (value) {
-                                  setState(() => line.categoryId = value);
-                                },
-                              ),
-                            ),
-                            const SizedBox(width: 8),
-                            Expanded(
-                              flex: 2,
-                              child: TextFormField(
-                                controller: line.amountController,
-                                keyboardType: const TextInputType
-                                    .numberWithOptions(decimal: true),
-                                decoration: const InputDecoration(
-                                  labelText: 'Montant',
-                                ),
-                                onChanged: (_) => setState(() {}),
-                                validator: (v) {
-                                  final parsed = double.tryParse(
-                                    (v ?? '').replaceAll(',', '.'),
-                                  );
-                                  return (parsed == null || parsed <= 0)
-                                      ? 'Invalide'
-                                      : null;
-                                },
-                              ),
-                            ),
-                            IconButton(
-                              icon: const Icon(Icons.remove_circle_outline),
-                              onPressed: _splitLines.length <= 2
-                                  ? null
-                                  : () => _removeSplitLine(line),
-                            ),
-                          ],
+                  ),
+                  const SizedBox(height: 12),
+                ],
+                if (!isTransfer)
+                  DropdownButtonFormField<String?>(
+                    isExpanded: true,
+                    initialValue: _sourceContainerId,
+                    decoration:
+                        const InputDecoration(labelText: 'Support (optionnel)'),
+                    items: [
+                      const DropdownMenuItem(value: null, child: Text('Aucun')),
+                      ..._containerItems(containers, _sourceContainerId),
+                    ],
+                    onChanged: (value) {
+                      setState(() => _sourceContainerId = value);
+                    },
+                  ),
+                if (isTransfer && !_isSourceSplit) ...[
+                  DropdownButtonFormField<String?>(
+                    isExpanded: true,
+                    initialValue: _sourceContainerId,
+                    decoration:
+                        const InputDecoration(labelText: 'Support source'),
+                    items: _containerItems(containers, _sourceContainerId),
+                    onChanged: (value) {
+                      setState(() => _sourceContainerId = value);
+                    },
+                    validator: (v) =>
+                        v == null ? 'Support source requis' : null,
+                  ),
+                  const SizedBox(height: 12),
+                ],
+                if (isTransfer && _isSourceSplit) ...[
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      ..._sourceLegLines.map(
+                        (line) => _transferLegLineRow(
+                          line: line,
+                          categories: categories,
+                          containers: containers,
+                          showCategory: false,
+                          onRemove: () => _removeSourceLegLine(line),
+                          canRemove: _sourceLegLines.length > 2,
                         ),
-                      );
-                    }),
-                    TextButton.icon(
-                      onPressed: _addSplitLine,
-                      icon: const Icon(Icons.add),
-                      label: const Text('Ajouter une catégorie'),
-                    ),
-                    Align(
-                      alignment: Alignment.centerRight,
-                      child: Text(
-                        'Total : ${_splitTotal.toStringAsFixed(2)} €',
-                        style: const TextStyle(fontWeight: FontWeight.bold),
                       ),
+                      TextButton.icon(
+                        onPressed: _addSourceLegLine,
+                        icon: const Icon(Icons.add),
+                        label: const Text('Ajouter un support source'),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                ],
+                if (isTransfer && !_isDestSplit) ...[
+                  DropdownButtonFormField<String?>(
+                    isExpanded: true,
+                    initialValue: _destinationContainerId,
+                    decoration: const InputDecoration(
+                      labelText: 'Support destination',
                     ),
-                  ],
-                )
-              else if (!_isDestSplit)
-                DropdownButtonFormField<String?>(
-                  initialValue: _selectedCategoryId,
-                  decoration: const InputDecoration(
-                      labelText: 'Catégorie (optionnel)'),
-                  items: [
-                    const DropdownMenuItem(value: null, child: Text('Aucune')),
-                    ...categories.map(
-                      (c) => DropdownMenuItem(value: c.id, child: Text(c.name)),
+                    items: _containerItems(
+                      containers
+                          .where((c) => c.id != _sourceContainerId)
+                          .toList(),
+                      _destinationContainerId,
                     ),
-                  ],
-                  onChanged: (value) {
-                    setState(() => _selectedCategoryId = value);
-                  },
+                    onChanged: (value) {
+                      setState(() => _destinationContainerId = value);
+                    },
+                    validator: (v) =>
+                        v == null ? 'Support destination requis' : null,
+                  ),
+                  const SizedBox(height: 12),
+                ],
+                if (isTransfer && _isDestSplit) ...[
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      ..._destLegLines.map(
+                        (line) => _transferLegLineRow(
+                          line: line,
+                          categories: categories,
+                          containers: containers,
+                          showCategory: true,
+                          onRemove: () => _removeDestLegLine(line),
+                          canRemove: _destLegLines.length > 2,
+                        ),
+                      ),
+                      TextButton.icon(
+                        onPressed: _addDestLegLine,
+                        icon: const Icon(Icons.add),
+                        label: const Text('Ajouter une destination'),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                ],
+                if (_transferError != null) ...[
+                  Text(
+                    _transferError!,
+                    style:
+                        TextStyle(color: Theme.of(context).colorScheme.error),
+                  ),
+                  const SizedBox(height: 12),
+                ],
+                if (!_isSplit &&
+                    !(isTransfer && (_isSourceSplit || _isDestSplit)))
+                  DropdownButtonFormField<String?>(
+                    isExpanded: true,
+                    initialValue: _selectedCategoryId,
+                    decoration: const InputDecoration(
+                        labelText: 'Catégorie (optionnel)'),
+                    items: [
+                      const DropdownMenuItem(
+                        value: null,
+                        child: Text('Aucune'),
+                      ),
+                      ...categories.map(
+                        (c) => DropdownMenuItem(
+                          value: c.id,
+                          child: Text(c.name, overflow: TextOverflow.ellipsis),
+                        ),
+                      ),
+                      const DropdownMenuItem(
+                        value: '__manage__',
+                        child: Text('➕ Gérer les catégories'),
+                      ),
+                    ],
+                    onChanged: (value) {
+                      if (value == '__manage__') {
+                        _openCategoriesManager();
+                      } else {
+                        setState(() {
+                          _selectedCategoryId = value;
+                        });
+                      }
+                    },
+                  )
+                else if (!isTransfer)
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      ..._splitLines.map((line) {
+                        return Padding(
+                          padding: const EdgeInsets.only(bottom: 8),
+                          child: Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Expanded(
+                                flex: 3,
+                                child: DropdownButtonFormField<String?>(
+                                  isExpanded: true,
+                                  initialValue: line.categoryId,
+                                  decoration: const InputDecoration(
+                                    labelText: 'Catégorie',
+                                  ),
+                                  items: [
+                                    const DropdownMenuItem(
+                                      value: null,
+                                      child: Text('Aucune'),
+                                    ),
+                                    ...categories.map(
+                                      (c) => DropdownMenuItem(
+                                        value: c.id,
+                                        child: Text(c.name,
+                                            overflow: TextOverflow.ellipsis),
+                                      ),
+                                    ),
+                                  ],
+                                  onChanged: (value) {
+                                    setState(() => line.categoryId = value);
+                                  },
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                flex: 2,
+                                child: TextFormField(
+                                  controller: line.amountController,
+                                  keyboardType:
+                                      const TextInputType.numberWithOptions(
+                                          decimal: true),
+                                  decoration: const InputDecoration(
+                                    labelText: 'Montant',
+                                  ),
+                                  onChanged: (_) => setState(() {}),
+                                  validator: (v) {
+                                    final parsed = double.tryParse(
+                                      (v ?? '').replaceAll(',', '.'),
+                                    );
+                                    return (parsed == null || parsed <= 0)
+                                        ? 'Invalide'
+                                        : null;
+                                  },
+                                ),
+                              ),
+                              IconButton(
+                                icon: const Icon(Icons.remove_circle_outline),
+                                onPressed: _splitLines.length <= 2
+                                    ? null
+                                    : () => _removeSplitLine(line),
+                              ),
+                            ],
+                          ),
+                        );
+                      }),
+                      TextButton.icon(
+                        onPressed: _addSplitLine,
+                        icon: const Icon(Icons.add),
+                        label: const Text('Ajouter une catégorie'),
+                      ),
+                      Align(
+                        alignment: Alignment.centerRight,
+                        child: Text(
+                          'Total : ${_splitTotal.toStringAsFixed(2)} €',
+                          style: const TextStyle(fontWeight: FontWeight.bold),
+                        ),
+                      ),
+                    ],
+                  )
+                else if (!_isDestSplit)
+                  DropdownButtonFormField<String?>(
+                    isExpanded: true,
+                    initialValue: _selectedCategoryId,
+                    decoration: const InputDecoration(
+                        labelText: 'Catégorie (optionnel)'),
+                    items: [
+                      const DropdownMenuItem(
+                          value: null, child: Text('Aucune')),
+                      ...categories.map(
+                        (c) => DropdownMenuItem(
+                            value: c.id,
+                            child:
+                                Text(c.name, overflow: TextOverflow.ellipsis)),
+                      ),
+                    ],
+                    onChanged: (value) {
+                      setState(() => _selectedCategoryId = value);
+                    },
+                  ),
+                if (!isTransfer && AccountMembersStore.all.length >= 2) ...[
+                  const SizedBox(height: 12),
+                  DropdownButtonFormField<String?>(
+                    isExpanded: true,
+                    initialValue: _paidByUserId,
+                    decoration: const InputDecoration(labelText: 'Payé par'),
+                    items: AccountMembersStore.all
+                        .map(
+                          (m) => DropdownMenuItem(
+                            value: m.userId,
+                            child: Text(m.displayName,
+                                overflow: TextOverflow.ellipsis),
+                          ),
+                        )
+                        .toList(),
+                    onChanged: (value) {
+                      setState(() => _paidByUserId = value);
+                    },
+                  ),
+                ],
+                const SizedBox(height: 12),
+                TextFormField(
+                  controller: _dateController,
+                  readOnly: true,
+                  decoration: const InputDecoration(labelText: 'Date'),
+                  onTap: _pickDate,
                 ),
-
-              const SizedBox(height: 12),
-
-              TextFormField(
-                controller: _dateController,
-                readOnly: true,
-                decoration: const InputDecoration(labelText: 'Date'),
-                onTap: _pickDate,
-              ),
-
-              const SizedBox(height: 24),
-
-              SizedBox(
-                width: double.infinity,
-                child: ElevatedButton(
-                  onPressed: _save,
-                  child: const Text('Enregistrer'),
+                const SizedBox(height: 24),
+                SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton(
+                    onPressed: _save,
+                    child: const Text('Enregistrer'),
+                  ),
                 ),
-              ),
-
-              const SizedBox(height: 16),
-            ],
+                const SizedBox(height: 16),
+              ],
+            ),
           ),
         ),
       ),

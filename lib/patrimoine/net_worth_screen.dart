@@ -43,8 +43,11 @@ class _NetWorthScreenState extends State<NetWorthScreen> {
 
   Future<void> _refreshPrices() async {
     final containers = _investmentContainers;
-    final coinIds = containers.expand((c) => c.cryptoHoldings.map((h) => h.coinId)).toList();
-    final symbols = containers.expand((c) => c.stockHoldings.map((h) => h.symbol)).toList();
+    final coinIds = containers
+        .expand((c) => c.cryptoHoldings.map((h) => h.coinId))
+        .toList();
+    final symbols =
+        containers.expand((c) => c.stockHoldings.map((h) => h.symbol)).toList();
 
     if (coinIds.isEmpty && symbols.isEmpty) return;
 
@@ -81,7 +84,8 @@ class _NetWorthScreenState extends State<NetWorthScreen> {
         .where((t) => !t.isCarryOver)
         .fold<double>(
           0,
-          (s, t) => t.type == TransactionType.income ? s + t.amount : s - t.amount,
+          (s, t) =>
+              t.type == TransactionType.income ? s + t.amount : s - t.amount,
         );
   }
 
@@ -91,7 +95,8 @@ class _NetWorthScreenState extends State<NetWorthScreen> {
         .where((t) => t.containerId == c.id && !t.isCarryOver)
         .fold<double>(
           0,
-          (s, t) => t.type == TransactionType.income ? s + t.amount : s - t.amount,
+          (s, t) =>
+              t.type == TransactionType.income ? s + t.amount : s - t.amount,
         );
     return opening + movements;
   }
@@ -102,7 +107,8 @@ class _NetWorthScreenState extends State<NetWorthScreen> {
         c.insuranceInterestMode != null;
 
     final calculated = configured
-        ? CapitalizationEngine.computeValue(container: c, atDate: DateTime.now())
+        ? CapitalizationEngine.computeValue(
+            container: c, atDate: DateTime.now())
         : null;
 
     return c.insuranceCorrectedValue ?? calculated;
@@ -136,6 +142,11 @@ class _NetWorthScreenState extends State<NetWorthScreen> {
         return _capitalizationValue(c);
       case ContainerType.investmentAccount:
         return _cryptoValue(c);
+      case ContainerType.credit:
+        // Une dette réduit le patrimoine net, contrairement aux autres
+        // types de support qui l'augmentent.
+        final remaining = c.creditRemainingBalance;
+        return remaining == null ? null : -remaining;
     }
   }
 
@@ -229,10 +240,10 @@ class _NetWorthScreenState extends State<NetWorthScreen> {
                     separatorBuilder: (_, __) => const Divider(height: 1),
                     itemBuilder: (context, index) {
                       final (container, value) = rows[index];
-                      final stockValue = container.type ==
-                              ContainerType.investmentAccount
-                          ? _stockValue(container)
-                          : 0.0;
+                      final stockValue =
+                          container.type == ContainerType.investmentAccount
+                              ? _stockValue(container)
+                              : 0.0;
                       final neutral =
                           Theme.of(context).colorScheme.onSurfaceVariant;
 

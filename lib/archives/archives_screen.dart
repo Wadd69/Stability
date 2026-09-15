@@ -1,7 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 
 import '../core/archives/archives_store.dart';
+import '../core/containers/containers_store.dart';
 import '../core/finance/categories_store.dart';
+import '../core/finance/transaction_analysis.dart';
 import 'package:stability/core/finance/finance.dart';
 import '../help/help_screen.dart';
 import '../help/help_topic.dart';
@@ -98,13 +101,17 @@ class _ArchivesScreenState extends State<ArchivesScreen>
     double income = 0;
     double expense = 0;
     final Map<String?, double> byCategory = {};
+    final containersStore = context.read<ContainersStore>();
 
     for (final m in months) {
       income += m.totalIncome;
       expense += m.totalExpense;
 
-      for (final t in TransactionsStore.archivedForMonth(m.id)) {
-        if (t.type != TransactionType.expense) continue;
+      final monthTx = TransactionsStore.archivedForMonth(m.id);
+      for (final t in monthTx) {
+        if (!TransactionAnalysis.countsAsExpense(t, monthTx, containersStore)) {
+          continue;
+        }
         byCategory[t.category] = (byCategory[t.category] ?? 0) + t.amount;
       }
     }
@@ -147,13 +154,16 @@ class _ArchivesScreenState extends State<ArchivesScreen>
         ...categories.map((e) {
           final label = (e.key == null)
               ? 'Sans catégorie'
-              : CategoriesStore.getById(e.key!)?.name ??
-                  'Catégorie supprimée';
+              : CategoriesStore.getById(e.key!)?.name ?? 'Catégorie supprimée';
 
           final List<Transaction> tx = [];
           for (final m in months) {
-            for (final t in TransactionsStore.archivedForMonth(m.id)) {
-              if (t.type != TransactionType.expense) continue;
+            final monthTx = TransactionsStore.archivedForMonth(m.id);
+            for (final t in monthTx) {
+              if (!TransactionAnalysis.countsAsExpense(
+                  t, monthTx, containersStore)) {
+                continue;
+              }
               if (t.category == e.key) {
                 tx.add(t);
               }
@@ -269,8 +279,7 @@ class _ArchivesScreenState extends State<ArchivesScreen>
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(title,
-                style: const TextStyle(fontWeight: FontWeight.bold)),
+            Text(title, style: const TextStyle(fontWeight: FontWeight.bold)),
             const SizedBox(height: 8),
             Text('Revenus : ${income.toStringAsFixed(2)} €'),
             Text('Dépenses : ${expense.toStringAsFixed(2)} €'),

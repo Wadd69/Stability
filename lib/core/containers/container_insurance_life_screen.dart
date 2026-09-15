@@ -100,42 +100,40 @@ class _ContainerInsuranceLifeScreenState
                 child: OutlinedButton.icon(
                   icon: const Icon(Icons.remove),
                   label: const Text('Rachat'),
-                  onPressed: () =>
-                      _openAddTransaction(TransactionType.expense),
+                  onPressed: () => _openAddTransaction(TransactionType.expense),
                 ),
               ),
             ],
           ),
+          const SizedBox(height: 12),
+          OutlinedButton.icon(
+            icon: const Icon(Icons.sync_alt),
+            label: const Text('Transfert depuis/vers un autre support'),
+            onPressed: () => _openAddTransaction(TransactionType.transfer),
+          ),
           const SizedBox(height: 24),
-
           _sectionTitle('Contrat'),
-
           _dateTile(
             label: 'Date d’ouverture',
             value: _openedAt,
             onChanged: (d) => setState(() => _openedAt = d),
           ),
-
           _numberTile(
             label: 'Taux annuel (%)',
             value: _annualRate,
             onChanged: (v) => setState(() => _annualRate = v),
           ),
-
           _modeTile(),
-
           const SizedBox(height: 24),
           _sectionTitle('Simulation'),
-
           _dateTile(
             label: 'Date de calcul',
             value: _calculationDate,
-            onChanged: (d) => setState(() => _calculationDate = d ?? _calculationDate),
+            onChanged: (d) =>
+                setState(() => _calculationDate = d ?? _calculationDate),
           ),
-
           const SizedBox(height: 24),
           _sectionTitle('Valeur'),
-
           ListTile(
             title: const Text('Valeur calculée'),
             trailing: Text(
@@ -145,7 +143,6 @@ class _ContainerInsuranceLifeScreenState
               style: const TextStyle(fontWeight: FontWeight.bold),
             ),
           ),
-
           ListTile(
             title: const Text('Valeur corrigée'),
             subtitle: const Text(
@@ -163,9 +160,7 @@ class _ContainerInsuranceLifeScreenState
             ),
             onTap: _editCorrectedValue,
           ),
-
           const Divider(),
-
           ListTile(
             title: const Text('Valeur retenue'),
             trailing: Text(
@@ -178,9 +173,7 @@ class _ContainerInsuranceLifeScreenState
               ),
             ),
           ),
-
           const SizedBox(height: 32),
-
           ElevatedButton.icon(
             icon: const Icon(Icons.save),
             label: const Text('Enregistrer'),
@@ -219,8 +212,8 @@ class _ContainerInsuranceLifeScreenState
         value == null
             ? '—'
             : '${value.day.toString().padLeft(2, '0')}/'
-              '${value.month.toString().padLeft(2, '0')}/'
-              '${value.year}',
+                '${value.month.toString().padLeft(2, '0')}/'
+                '${value.year}',
       ),
       onTap: () async {
         final picked = await showDatePicker(
@@ -291,8 +284,7 @@ class _ContainerInsuranceLifeScreenState
                 : 'Intérêt plein',
       ),
       onTap: () async {
-        final selected =
-            await showDialog<InsuranceInterestMode>(
+        final selected = await showDialog<InsuranceInterestMode>(
           context: context,
           builder: (_) => SimpleDialog(
             title: const Text('Mode de calcul'),
@@ -333,8 +325,7 @@ class _ContainerInsuranceLifeScreenState
         title: const Text('Corriger la valeur'),
         content: TextField(
           controller: controller,
-          keyboardType:
-              const TextInputType.numberWithOptions(decimal: true),
+          keyboardType: const TextInputType.numberWithOptions(decimal: true),
         ),
         actions: [
           TextButton(

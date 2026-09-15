@@ -18,8 +18,10 @@ class CategoryGoalsStore {
     final accountId = CurrentAccount.active.id;
     if (accountId.isEmpty) return;
 
-    final rows =
-        await _client.from('category_goals').select().eq('account_id', accountId);
+    final rows = await _client
+        .from('category_goals')
+        .select()
+        .eq('account_id', accountId);
 
     for (final r in (rows as List)) {
       final row = r as Map<String, dynamic>;

@@ -26,8 +26,7 @@ class ContainerInvestmentScreen extends StatefulWidget {
       _ContainerInvestmentScreenState();
 }
 
-class _ContainerInvestmentScreenState
-    extends State<ContainerInvestmentScreen> {
+class _ContainerInvestmentScreenState extends State<ContainerInvestmentScreen> {
   late List<CryptoHolding> _cryptoHoldings;
   late List<StockHolding> _stockHoldings;
 
@@ -96,6 +95,7 @@ class _ContainerInvestmentScreenState
             children: [
               DropdownButtonFormField<CryptoAsset>(
                 initialValue: selected,
+                isExpanded: true,
                 decoration: const InputDecoration(labelText: 'Crypto'),
                 items: CryptoCatalog.popular
                     .map((a) => DropdownMenuItem(
@@ -185,7 +185,8 @@ class _ContainerInvestmentScreenState
     setState(() {
       final index = _cryptoHoldings.indexWhere((h) => h.id == holding.id);
       if (index != -1) {
-        _cryptoHoldings[index] = _cryptoHoldings[index].copyWith(quantity: quantity);
+        _cryptoHoldings[index] =
+            _cryptoHoldings[index].copyWith(quantity: quantity);
       }
     });
     _persist();
@@ -373,7 +374,8 @@ class _ContainerInvestmentScreenState
     setState(() {
       final index = _stockHoldings.indexWhere((h) => h.id == holding.id);
       if (index != -1) {
-        _stockHoldings[index] = _stockHoldings[index].copyWith(quantity: quantity);
+        _stockHoldings[index] =
+            _stockHoldings[index].copyWith(quantity: quantity);
       }
     });
     _persist();
@@ -488,9 +490,7 @@ class _ContainerInvestmentScreenState
                 onTap: () => _editCryptoQuantity(h),
               );
             }),
-
           const Divider(height: 32),
-
           _sectionHeader(
             title: 'Actions / ETF (\$)',
             totalLabel: '${_totalStockValue.toStringAsFixed(2)} \$',
@@ -546,7 +546,6 @@ class _ContainerInvestmentScreenState
                 onTap: () => _editStockQuantity(h),
               );
             }),
-
           const SizedBox(height: 24),
         ],
       ),

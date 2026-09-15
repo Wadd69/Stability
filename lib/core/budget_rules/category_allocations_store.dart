@@ -41,17 +41,21 @@ class CategoryAllocationsStore {
 
     for (final r in (allocRows as List)) {
       final row = r as Map<String, dynamic>;
-      final key = _key(row['month_key'] as String, row['category_id'] as String);
+      final key =
+          _key(row['month_key'] as String, row['category_id'] as String);
       _allocations[key] = (row['allocated'] as num).toDouble();
       _carryIns[key] = (row['carry_in'] as num).toDouble();
     }
 
-    final incomeRows =
-        await _client.from('planned_income').select().eq('account_id', accountId);
+    final incomeRows = await _client
+        .from('planned_income')
+        .select()
+        .eq('account_id', accountId);
 
     for (final r in (incomeRows as List)) {
       final row = r as Map<String, dynamic>;
-      _plannedIncomes[row['month_key'] as String] = (row['amount'] as num).toDouble();
+      _plannedIncomes[row['month_key'] as String] =
+          (row['amount'] as num).toDouble();
     }
   }
 
@@ -85,6 +89,12 @@ class CategoryAllocationsStore {
   // ─────────────────────────────────────────────
   static double getCarryIn(String monthKey, String categoryId) {
     return _carryIns[_key(monthKey, categoryId)] ?? 0.0;
+  }
+
+  /// Distingue "jamais reporté" de "reporté à 0€" — sert de garde-fou
+  /// d'idempotence (voir closeMonth).
+  static bool hasCarryIn(String monthKey, String categoryId) {
+    return _carryIns.containsKey(_key(monthKey, categoryId));
   }
 
   static Future<void> _setCarryIn(
@@ -142,11 +152,13 @@ class CategoryAllocationsStore {
   // MONTANT DISPONIBLE DANS L'ENVELOPPE CE MOIS-CI
   // ─────────────────────────────────────────────
   static double available(String monthKey, String categoryId) {
-    return getCarryIn(monthKey, categoryId) + getAllocated(monthKey, categoryId);
+    return getCarryIn(monthKey, categoryId) +
+        getAllocated(monthKey, categoryId);
   }
 
   static double remaining(String monthKey, String categoryId) {
-    return available(monthKey, categoryId) - spentForCategory(monthKey, categoryId);
+    return available(monthKey, categoryId) -
+        spentForCategory(monthKey, categoryId);
   }
 
   // ─────────────────────────────────────────────
@@ -170,6 +182,12 @@ class CategoryAllocationsStore {
     required List<String> categoryIds,
   }) async {
     for (final categoryId in categoryIds) {
+      // Garde-fou d'idempotence (même raison que MonthlyBalancesStore) :
+      // un second passage verrait les transactions de monthKey déjà
+      // archivées par TransactionsStore.closeMonth, donc "dépensé" à tort
+      // proche de 0 — et écraserait le bon report par un mauvais.
+      if (hasCarryIn(nextMonthKey, categoryId)) continue;
+
       final leftover = remaining(monthKey, categoryId);
       await _setCarryIn(nextMonthKey, categoryId, leftover);
     }

@@ -30,7 +30,8 @@ class MonthlyBalancesStore {
 
     for (final r in (rows as List)) {
       final row = r as Map<String, dynamic>;
-      _balances[_key(row['month_key'] as String, row['container_id'] as String)] =
+      _balances[
+              _key(row['month_key'] as String, row['container_id'] as String)] =
           (row['opening_balance'] as num).toDouble();
     }
   }
@@ -46,6 +47,13 @@ class MonthlyBalancesStore {
   // ─────────────────────────────────────────────
   static double getOpeningBalance(String monthKey, String containerId) {
     return _balances[_key(monthKey, containerId)] ?? 0.0;
+  }
+
+  /// Distingue "jamais défini" de "défini à 0€" — contrairement à
+  /// [getOpeningBalance], qui renvoie 0.0 par défaut dans les deux cas.
+  /// Sert de garde-fou d'idempotence (voir TransactionsStore.closeMonth).
+  static bool hasOpeningBalance(String monthKey, String containerId) {
+    return _balances.containsKey(_key(monthKey, containerId));
   }
 
   static Future<void> setOpeningBalance(

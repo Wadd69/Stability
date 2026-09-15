@@ -87,49 +87,63 @@ class ContainerInterestsScreen extends StatelessWidget {
 
                       return Card(
                         margin: const EdgeInsets.only(bottom: 8),
-                        child: ListTile(
-                          title: Text(
-                            _formatQuinzaine(l.quinzaineDate),
-                            style: const TextStyle(
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                          subtitle: Column(
+                        child: Padding(
+                          padding: const EdgeInsets.all(16),
+                          child: Row(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              Text(
-                                'Capital pris en compte : ${l.capital.toStringAsFixed(2)} €',
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      _formatQuinzaine(l.quinzaineDate),
+                                      style: const TextStyle(
+                                        fontWeight: FontWeight.w600,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 4),
+                                    Text(
+                                      'Capital pris en compte : ${l.capital.toStringAsFixed(2)} €',
+                                    ),
+                                    if (l.isCorrected)
+                                      Text(
+                                        'Calculé : +${l.computedInterest.toStringAsFixed(2)} €',
+                                        style: TextStyle(
+                                          fontSize: 12,
+                                          color: Theme.of(context)
+                                              .colorScheme
+                                              .onSurfaceVariant,
+                                        ),
+                                      ),
+                                  ],
+                                ),
                               ),
-                              if (l.isCorrected)
-                                Text(
-                                  'Calculé : +${l.computedInterest.toStringAsFixed(2)} €',
-                                  style: TextStyle(
-                                    fontSize: 12,
-                                    color: Theme.of(context)
-                                        .colorScheme
-                                        .onSurfaceVariant,
+                              const SizedBox(width: 8),
+                              Column(
+                                mainAxisSize: MainAxisSize.min,
+                                crossAxisAlignment: CrossAxisAlignment.end,
+                                children: [
+                                  Text(
+                                    '+${l.displayedInterest.toStringAsFixed(2)} €',
+                                    style: TextStyle(
+                                      color: l.isCorrected
+                                          ? context.appColors.warning
+                                          : context.appColors.positive,
+                                      fontWeight: FontWeight.bold,
+                                    ),
                                   ),
-                                ),
-                            ],
-                          ),
-                          trailing: Column(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              Text(
-                                '+${l.displayedInterest.toStringAsFixed(2)} €',
-                                style: TextStyle(
-                                  color: l.isCorrected
-                                      ? context.appColors.warning
-                                      : context.appColors.positive,
-                                  fontWeight: FontWeight.bold,
-                                ),
-                              ),
-                              IconButton(
-                                icon: const Icon(Icons.edit, size: 18),
-                                tooltip: 'Corriger l’intérêt',
-                                onPressed: () {
-                                  _editInterest(context, container, l);
-                                },
+                                  IconButton(
+                                    icon: const Icon(Icons.edit, size: 18),
+                                    tooltip: 'Corriger l’intérêt',
+                                    visualDensity: VisualDensity.compact,
+                                    padding: EdgeInsets.zero,
+                                    constraints: const BoxConstraints(),
+                                    onPressed: () {
+                                      _editInterest(context, container, l);
+                                    },
+                                  ),
+                                ],
                               ),
                             ],
                           ),
@@ -138,7 +152,6 @@ class ContainerInterestsScreen extends StatelessWidget {
                     },
                   ),
                 ),
-
                 Padding(
                   padding: const EdgeInsets.all(16),
                   child: SizedBox(
@@ -194,9 +207,7 @@ class ContainerInterestsScreen extends StatelessWidget {
       while (txIndex < txs.length &&
           _txEligibleForQuinzaine(txs[txIndex].date, q)) {
         final t = txs[txIndex];
-        capital += t.type == TransactionType.income
-            ? t.amount
-            : -t.amount;
+        capital += t.type == TransactionType.income ? t.amount : -t.amount;
         txIndex++;
       }
 
@@ -205,19 +216,16 @@ class ContainerInterestsScreen extends StatelessWidget {
       final ratePeriod = container.rateAt(q);
       if (ratePeriod == null) continue;
 
-      final computed =
-          capital * (ratePeriod.rate / 100) / 24;
+      final computed = capital * (ratePeriod.rate / 100) / 24;
 
-      final adjustment =
-          InterestAdjustmentsStore.getFor(container.id, q);
+      final adjustment = InterestAdjustmentsStore.getFor(container.id, q);
 
       result.add(
         InterestLine(
           quinzaineDate: q,
           capital: capital,
           computedInterest: computed,
-          displayedInterest:
-              adjustment?.correctedInterest ?? computed,
+          displayedInterest: adjustment?.correctedInterest ?? computed,
           isCorrected: adjustment != null,
         ),
       );
@@ -286,8 +294,7 @@ class ContainerInterestsScreen extends StatelessWidget {
         title: Text(_formatQuinzaine(line.quinzaineDate)),
         content: TextField(
           controller: controller,
-          keyboardType:
-              const TextInputType.numberWithOptions(decimal: true),
+          keyboardType: const TextInputType.numberWithOptions(decimal: true),
           decoration: const InputDecoration(
             labelText: 'Intérêt à valider (€)',
           ),

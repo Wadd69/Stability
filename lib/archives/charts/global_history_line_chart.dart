@@ -1,11 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:fl_chart/fl_chart.dart';
+import 'package:provider/provider.dart';
 import 'package:stability/core/finance/transaction_type.dart';
 
 import '../../core/archives/archives_store.dart';
 import '../../core/archives/archived_month.dart';
+import '../../core/containers/containers_store.dart';
 import '../../core/finance/categories_store.dart';
 import '../../core/finance/transaction.dart';
+import '../../core/finance/transaction_analysis.dart';
 import '../../core/finance/transactions_store.dart';
 import '../../theme/app_colors.dart';
 import '../../help/help_screen.dart';
@@ -52,18 +55,23 @@ class _GlobalHistoryLineChartScreenState
   // ─────────────────────────
   List<ArchivedMonth> get _months {
     final m = List<ArchivedMonth>.from(ArchivesStore.all)
-      ..sort((a, b) =>
-          (a.year * 12 + a.month).compareTo(b.year * 12 + b.month));
+      ..sort(
+          (a, b) => (a.year * 12 + a.month).compareTo(b.year * 12 + b.month));
     return m;
   }
 
-  List<Transaction> get _allTransactions => _months
-      .expand((m) => TransactionsStore.archivedForMonth(m.id))
-      .toList();
+  List<Transaction> get _allTransactions {
+    final all = _months
+        .expand((m) => TransactionsStore.archivedForMonth(m.id))
+        .toList();
+    return TransactionAnalysis.filterForAnalysis(
+      all,
+      context.read<ContainersStore>(),
+    );
+  }
 
   bool _allowed(String? id) =>
-      selectedCategories.contains('__ALL__') ||
-      selectedCategories.contains(id);
+      selectedCategories.contains('__ALL__') || selectedCategories.contains(id);
 
   @override
   void initState() {
@@ -136,7 +144,8 @@ class _GlobalHistoryLineChartScreenState
             ),
             const SizedBox(height: 12),
             CategoryPieChart(
-              transactions: _allTransactions.where((t) => _allowed(t.category)).toList(),
+              transactions:
+                  _allTransactions.where((t) => _allowed(t.category)).toList(),
               mode: pieMode,
               asPercentage: donutAsPercentage,
               currencySymbol: _currencySymbol,
@@ -175,12 +184,20 @@ class _GlobalHistoryLineChartScreenState
       perCategory[c.id] = [];
     }
 
+    final containersStore = context.read<ContainersStore>();
+
     for (final m in _months) {
       double exp = 0;
       double inc = 0;
+      final monthTx = TransactionsStore.archivedForMonth(m.id);
 
-      for (final t in TransactionsStore.archivedForMonth(m.id)) {
+      for (final t in monthTx) {
         if (!_allowed(t.category)) continue;
+
+        final countsAsExpense =
+            TransactionAnalysis.countsAsExpense(t, monthTx, containersStore);
+        final countsAsIncome = TransactionAnalysis.countsAsIncome(t);
+        if (!countsAsExpense && !countsAsIncome) continue;
 
         perCategory.putIfAbsent(t.category, () => []);
         if (perCategory[t.category]!.length < totalsExpenses.length + 1) {
@@ -188,7 +205,7 @@ class _GlobalHistoryLineChartScreenState
         }
         perCategory[t.category]!.last += t.amount;
 
-        if (t.type == TransactionType.expense) {
+        if (countsAsExpense) {
           exp += t.amount;
         } else {
           inc += t.amount;
@@ -221,8 +238,7 @@ class _GlobalHistoryLineChartScreenState
       }
     }
 
-    double maxY =
-        allY.isEmpty ? 0 : allY.reduce((a, b) => a > b ? a : b);
+    double maxY = allY.isEmpty ? 0 : allY.reduce((a, b) => a > b ? a : b);
 
     double padding;
     if (maxY < 5000) {
@@ -250,10 +266,10 @@ class _GlobalHistoryLineChartScreenState
                 borderData: FlBorderData(show: false),
                 gridData: FlGridData(show: true, drawVerticalLine: false),
                 titlesData: FlTitlesData(
-                  topTitles:
-                      const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-                  rightTitles:
-                      const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+                  topTitles: const AxisTitles(
+                      sideTitles: SideTitles(showTitles: false)),
+                  rightTitles: const AxisTitles(
+                      sideTitles: SideTitles(showTitles: false)),
                   leftTitles: AxisTitles(
                     sideTitles: SideTitles(
                       showTitles: true,
@@ -295,8 +311,7 @@ class _GlobalHistoryLineChartScreenState
     );
   }
 
-  LineChartBarData _buildLine(
-      List<double> values, Color color, double width) {
+  LineChartBarData _buildLine(List<double> values, Color color, double width) {
     return LineChartBarData(
       spots: List.generate(
         values.length,
@@ -363,8 +378,7 @@ class _GlobalHistoryLineChartScreenState
             leading: Container(
               width: 10,
               height: 10,
-              decoration:
-                  BoxDecoration(color: color, shape: BoxShape.circle),
+              decoration: BoxDecoration(color: color, shape: BoxShape.circle),
             ),
             title: Text(_categoryName(e.key)),
             children: e.value.map(_transactionTile).toList(),
@@ -381,7 +395,9 @@ class _GlobalHistoryLineChartScreenState
       trailing: Text(
         '${isIncome ? '+' : '-'}${t.amount.toStringAsFixed(2)}$_currencySymbol',
         style: TextStyle(
-          color: isIncome ? context.appColors.positive : context.appColors.negative,
+          color: isIncome
+              ? context.appColors.positive
+              : context.appColors.negative,
           fontWeight: FontWeight.bold,
         ),
       ),
@@ -429,8 +445,7 @@ class _GlobalHistoryLineChartScreenState
           Container(
             width: 10,
             height: 10,
-            decoration:
-                BoxDecoration(color: color, shape: BoxShape.circle),
+            decoration: BoxDecoration(color: color, shape: BoxShape.circle),
           ),
           const SizedBox(width: 8),
           Text(
@@ -455,8 +470,7 @@ class _GlobalHistoryLineChartScreenState
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(title,
-                  style: const TextStyle(fontWeight: FontWeight.bold)),
+              Text(title, style: const TextStyle(fontWeight: FontWeight.bold)),
               const SizedBox(height: 12),
               Expanded(child: child),
             ],

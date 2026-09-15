@@ -24,7 +24,8 @@ class ArchivesStore {
     _months
       ..clear()
       ..addAll(
-        (rows as List).map((r) => ArchivedMonth.fromMap(r as Map<String, dynamic>)),
+        (rows as List)
+            .map((r) => ArchivedMonth.fromMap(r as Map<String, dynamic>)),
       );
   }
 

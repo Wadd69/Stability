@@ -15,8 +15,7 @@ class ComparisonSelectorScreen extends StatefulWidget {
       _ComparisonSelectorScreenState();
 }
 
-class _ComparisonSelectorScreenState
-    extends State<ComparisonSelectorScreen> {
+class _ComparisonSelectorScreenState extends State<ComparisonSelectorScreen> {
   final Set<int> _selectedYears = {};
   final Set<String> _selectedMonthIds = {};
 
@@ -43,8 +42,7 @@ class _ComparisonSelectorScreenState
             ),
           ),
           const SizedBox(height: 8),
-          if (years.isEmpty)
-            const Text('Aucune année disponible'),
+          if (years.isEmpty) const Text('Aucune année disponible'),
           ...years.map((year) {
             return CheckboxListTile(
               title: Text(year.toString()),
@@ -72,8 +70,7 @@ class _ComparisonSelectorScreenState
             ),
           ),
           const SizedBox(height: 8),
-          if (months.isEmpty)
-            const Text('Aucun mois disponible'),
+          if (months.isEmpty) const Text('Aucun mois disponible'),
           ...months.map((m) {
             return CheckboxListTile(
               title: Text(m.label),
@@ -97,8 +94,7 @@ class _ComparisonSelectorScreenState
           ElevatedButton.icon(
             icon: const Icon(Icons.compare_arrows),
             label: const Text('Comparer'),
-            onPressed: (_selectedYears.isEmpty &&
-                    _selectedMonthIds.isEmpty)
+            onPressed: (_selectedYears.isEmpty && _selectedMonthIds.isEmpty)
                 ? null
                 : _goToComparison,
           ),
@@ -125,12 +121,11 @@ class _ComparisonSelectorScreenState
 
     // Mois
     for (final id in _selectedMonthIds) {
-      final ArchivedMonth? month = ArchivesStore.all
-          .cast<ArchivedMonth?>()
-          .firstWhere(
-            (m) => m?.id == id,
-            orElse: () => null,
-          );
+      final ArchivedMonth? month =
+          ArchivesStore.all.cast<ArchivedMonth?>().firstWhere(
+                (m) => m?.id == id,
+                orElse: () => null,
+              );
 
       if (month != null) {
         periods.add(

@@ -5,9 +5,25 @@ import '../finance/budget_bucket.dart';
 import '../finance/transactions_store.dart';
 import '../finance/transaction_type.dart';
 import 'category_allocations_store.dart';
+import '../../accounts/current_account.dart';
+import '../../backend/cloud_accounts_repository.dart';
 import '../../help/help_screen.dart';
 import '../../help/help_topic.dart';
 import '../../theme/app_colors.dart';
+
+class _BucketRow {
+  final TextEditingController nameController;
+  final TextEditingController shareController;
+
+  _BucketRow({required String name, required String share})
+      : nameController = TextEditingController(text: name),
+        shareController = TextEditingController(text: share);
+
+  void dispose() {
+    nameController.dispose();
+    shareController.dispose();
+  }
+}
 
 class FiftyThirtyTwentyScreen extends StatefulWidget {
   final String monthKey;
@@ -63,16 +79,168 @@ class _FiftyThirtyTwentyScreenState extends State<FiftyThirtyTwentyScreen> {
     setState(() {});
   }
 
-  Map<BudgetBucket?, double> _spentByBucket() {
-    final spent = <BudgetBucket?, double>{};
+  /// Ouvre l'éditeur des enveloppes (nom + % au choix) : ajouter, retirer,
+  /// renommer, ajuster. Enregistré sur le compte cloud actif.
+  Future<void> _editBuckets() async {
+    final rows = CurrentAccount.active.effectiveBuckets
+        .map((b) => _BucketRow(
+              name: b.name,
+              share: (b.targetShare * 100).toStringAsFixed(0),
+            ))
+        .toList();
+
+    await showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      builder: (_) => StatefulBuilder(
+        builder: (context, setModalState) {
+          final total = rows.fold<double>(
+            0,
+            (sum, r) => sum + (double.tryParse(r.shareController.text) ?? 0),
+          );
+
+          return Padding(
+            padding: EdgeInsets.only(
+              bottom: MediaQuery.of(context).viewInsets.bottom,
+              left: 16,
+              right: 16,
+              top: 16,
+            ),
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      const Expanded(
+                        child: Text(
+                          'Enveloppes',
+                          style: TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ),
+                      IconButton(
+                        tooltip: 'Ajouter une enveloppe',
+                        icon: const Icon(Icons.add_circle_outline),
+                        onPressed: () {
+                          rows.add(_BucketRow(name: '', share: '0'));
+                          setModalState(() {});
+                        },
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    'Total actuel : ${total.toStringAsFixed(0)}%'
+                    '${total != 100 ? ' (idéalement 100%)' : ''}',
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: total == 100
+                          ? Theme.of(context).colorScheme.onSurfaceVariant
+                          : context.appColors.warning,
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  for (final row in rows)
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 8),
+                      child: Row(
+                        children: [
+                          Expanded(
+                            flex: 3,
+                            child: TextField(
+                              controller: row.nameController,
+                              decoration:
+                                  const InputDecoration(labelText: 'Nom'),
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            flex: 2,
+                            child: TextField(
+                              controller: row.shareController,
+                              keyboardType:
+                                  const TextInputType.numberWithOptions(
+                                      decimal: true),
+                              decoration:
+                                  const InputDecoration(suffixText: '%'),
+                              onChanged: (_) => setModalState(() {}),
+                            ),
+                          ),
+                          IconButton(
+                            tooltip: 'Retirer',
+                            icon: const Icon(Icons.remove_circle_outline),
+                            onPressed: rows.length <= 1
+                                ? null
+                                : () {
+                                    rows.remove(row);
+                                    setModalState(() {});
+                                  },
+                          ),
+                        ],
+                      ),
+                    ),
+                  const SizedBox(height: 16),
+                  SizedBox(
+                    width: double.infinity,
+                    child: ElevatedButton(
+                      onPressed: () async {
+                        final newBuckets = <CustomBucket>[];
+                        for (int i = 0; i < rows.length; i++) {
+                          final name = rows[i].nameController.text.trim();
+                          if (name.isEmpty) continue;
+                          final share = (double.tryParse(
+                                    rows[i].shareController.text,
+                                  ) ??
+                                  0) /
+                              100;
+                          newBuckets.add(CustomBucket(
+                            id: 'bucket_$i',
+                            name: name,
+                            targetShare: share,
+                          ));
+                        }
+                        final updated = CurrentAccount.active
+                            .copyWith(customBuckets: newBuckets);
+                        await CloudAccountsRepository.updateAccount(updated);
+                        CurrentAccount.active = updated;
+                        if (!context.mounted) return;
+                        Navigator.pop(context);
+                      },
+                      child: const Text('Enregistrer'),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                ],
+              ),
+            ),
+          );
+        },
+      ),
+    );
+
+    for (final row in rows) {
+      row.dispose();
+    }
+    if (!mounted) return;
+    setState(() {});
+  }
+
+  Map<String?, double> _spentByBucket() {
+    final spent = <String?, double>{};
 
     final expenses = TransactionsStore.transactionsForMonth(widget.monthKey)
-        .where((t) => t.type == TransactionType.expense && t.transferId == null);
+        .where(
+            (t) => t.type == TransactionType.expense && t.transferId == null);
 
     for (final t in expenses) {
-      final bucket =
-          t.category != null ? CategoriesStore.getById(t.category!)?.bucket : null;
-      spent[bucket] = (spent[bucket] ?? 0) + t.amount;
+      final bucketId = t.category != null
+          ? CategoriesStore.getById(t.category!)?.bucketId
+          : null;
+      spent[bucketId] = (spent[bucketId] ?? 0) + t.amount;
     }
 
     return spent;
@@ -83,11 +251,17 @@ class _FiftyThirtyTwentyScreenState extends State<FiftyThirtyTwentyScreen> {
     final income = CategoryAllocationsStore.getPlannedIncome(widget.monthKey);
     final spentByBucket = _spentByBucket();
     final unclassified = spentByBucket[null] ?? 0;
+    final buckets = CurrentAccount.active.effectiveBuckets;
 
     return Scaffold(
       appBar: AppBar(
-        title: Text('50 / 30 / 20 — ${widget.monthLabel}'),
+        title: Text('Pourcentages personnalisés — ${widget.monthLabel}'),
         actions: [
+          IconButton(
+            tooltip: 'Modifier les enveloppes',
+            icon: const Icon(Icons.tune),
+            onPressed: _editBuckets,
+          ),
           IconButton(
             icon: const Icon(Icons.help_outline),
             onPressed: () {
@@ -128,7 +302,6 @@ class _FiftyThirtyTwentyScreenState extends State<FiftyThirtyTwentyScreen> {
             ),
           ),
           const SizedBox(height: 16),
-
           if (income == 0)
             const Padding(
               padding: EdgeInsets.symmetric(vertical: 16),
@@ -139,9 +312,9 @@ class _FiftyThirtyTwentyScreenState extends State<FiftyThirtyTwentyScreen> {
               ),
             )
           else
-            ...BudgetBucket.values.map((bucket) {
+            ...buckets.map((bucket) {
               final target = income * bucket.targetShare;
-              final spent = spentByBucket[bucket] ?? 0;
+              final spent = spentByBucket[bucket.id] ?? 0;
               final ratio = target == 0 ? 0.0 : (spent / target).clamp(0, 2);
               final over = spent > target;
 
@@ -153,7 +326,8 @@ class _FiftyThirtyTwentyScreenState extends State<FiftyThirtyTwentyScreen> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        bucket.label,
+                        '${bucket.name} '
+                        '(${(bucket.targetShare * 100).toStringAsFixed(0)}%)',
                         style: const TextStyle(
                           fontSize: 16,
                           fontWeight: FontWeight.w600,
@@ -187,7 +361,6 @@ class _FiftyThirtyTwentyScreenState extends State<FiftyThirtyTwentyScreen> {
                 ),
               );
             }),
-
           if (unclassified > 0) ...[
             const SizedBox(height: 8),
             Card(
@@ -196,7 +369,7 @@ class _FiftyThirtyTwentyScreenState extends State<FiftyThirtyTwentyScreen> {
                 leading: const Icon(Icons.help_outline),
                 title: const Text('Dépenses non classées'),
                 subtitle: const Text(
-                  'Catégories sans besoin/envie/épargne assigné',
+                  'Catégories sans enveloppe assignée',
                 ),
                 trailing: Text(
                   '${unclassified.toStringAsFixed(2)} €',

@@ -26,7 +26,6 @@ class HelpScreen extends StatelessWidget {
             Text(paragraph, style: const TextStyle(fontSize: 15)),
             const SizedBox(height: 16),
           ],
-
           if (topic == HelpTopic.dashboard) ...[
             const Divider(),
             const SizedBox(height: 8),

@@ -23,8 +23,7 @@ class ContainerRetirementScreen extends StatefulWidget {
       _ContainerRetirementScreenState();
 }
 
-class _ContainerRetirementScreenState
-    extends State<ContainerRetirementScreen> {
+class _ContainerRetirementScreenState extends State<ContainerRetirementScreen> {
   DateTime? _openedAt;
   double? _annualRate;
   InsuranceInterestMode? _mode;
@@ -125,7 +124,6 @@ class _ContainerRetirementScreenState
                 ],
               ),
             ),
-
           Row(
             children: [
               Expanded(
@@ -140,49 +138,45 @@ class _ContainerRetirementScreenState
                 child: OutlinedButton.icon(
                   icon: const Icon(Icons.remove),
                   label: const Text('Rachat'),
-                  onPressed: () =>
-                      _openAddTransaction(TransactionType.expense),
+                  onPressed: () => _openAddTransaction(TransactionType.expense),
                 ),
               ),
             ],
           ),
+          const SizedBox(height: 12),
+          OutlinedButton.icon(
+            icon: const Icon(Icons.sync_alt),
+            label: const Text('Transfert depuis/vers un autre support'),
+            onPressed: () => _openAddTransaction(TransactionType.transfer),
+          ),
           const SizedBox(height: 24),
-
           _sectionTitle('Plan'),
-
           _dateTile(
             label: 'Date d\'ouverture',
             value: _openedAt,
             onChanged: (d) => setState(() => _openedAt = d),
           ),
-
           _numberTile(
             label: 'Taux annuel (%)',
             value: _annualRate,
             onChanged: (v) => setState(() => _annualRate = v),
           ),
-
           _modeTile(),
-
           _dateTile(
             label: 'Date de déblocage (retraite)',
             value: _unlockDate,
             onChanged: (d) => setState(() => _unlockDate = d),
           ),
-
           const SizedBox(height: 24),
           _sectionTitle('Simulation'),
-
           _dateTile(
             label: 'Date de calcul',
             value: _calculationDate,
             onChanged: (d) =>
                 setState(() => _calculationDate = d ?? _calculationDate),
           ),
-
           const SizedBox(height: 24),
           _sectionTitle('Valeur'),
-
           ListTile(
             title: const Text('Valeur calculée'),
             trailing: Text(
@@ -192,7 +186,6 @@ class _ContainerRetirementScreenState
               style: const TextStyle(fontWeight: FontWeight.bold),
             ),
           ),
-
           ListTile(
             title: const Text('Valeur corrigée'),
             subtitle: const Text(
@@ -210,9 +203,7 @@ class _ContainerRetirementScreenState
             ),
             onTap: _editCorrectedValue,
           ),
-
           const Divider(),
-
           ListTile(
             title: const Text('Valeur retenue'),
             trailing: Text(
@@ -225,9 +216,7 @@ class _ContainerRetirementScreenState
               ),
             ),
           ),
-
           const SizedBox(height: 32),
-
           ElevatedButton.icon(
             icon: const Icon(Icons.save),
             label: const Text('Enregistrer'),

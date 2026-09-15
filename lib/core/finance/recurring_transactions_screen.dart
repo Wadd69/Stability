@@ -1,11 +1,14 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 
 import 'categories_store.dart';
 import 'recurring_transaction.dart';
 import 'recurring_transactions_store.dart';
 import 'transaction_type.dart';
 import 'edit_recurring_transaction_sheet.dart';
+import 'recurring_widget_service.dart';
 import 'active_month_store.dart';
+import '../containers/containers_store.dart';
 import '../../help/help_screen.dart';
 import '../../help/help_topic.dart';
 import '../../theme/app_colors.dart';
@@ -29,7 +32,11 @@ class _RecurringTransactionsScreenState
 
     // Si le gabarit vient de devenir dû pour le mois actif, on le génère
     // tout de suite plutôt que d'attendre la prochaine clôture de mois.
-    await RecurringTransactionsStore.generateDueForMonth(ActiveMonthStore.current);
+    await RecurringTransactionsStore.generateDueForMonth(
+      ActiveMonthStore.current,
+      context.read<ContainersStore>(),
+    );
+    await RecurringWidgetService.refresh();
     if (!mounted) return;
     setState(() {});
   }
@@ -51,6 +58,7 @@ class _RecurringTransactionsScreenState
           TextButton(
             onPressed: () async {
               await RecurringTransactionsStore.remove(r.id);
+              await RecurringWidgetService.refresh();
               if (!mounted) return;
               setState(() {});
               Navigator.pop(context);
@@ -109,15 +117,23 @@ class _RecurringTransactionsScreenState
               itemBuilder: (context, index) {
                 final r = items[index];
                 final isIncome = r.type == TransactionType.income;
-                final categoryName =
-                    r.category != null ? CategoriesStore.getById(r.category!)?.name : null;
+                final isTransfer = r.type == TransactionType.transfer;
+                final categoryName = r.category != null
+                    ? CategoriesStore.getById(r.category!)?.name
+                    : null;
 
                 return ListTile(
                   leading: Icon(
-                    isIncome ? Icons.add_circle_outline : Icons.remove_circle_outline,
-                    color: isIncome
-                        ? context.appColors.positive
-                        : context.appColors.negative,
+                    isTransfer
+                        ? Icons.sync_alt
+                        : isIncome
+                            ? Icons.add_circle_outline
+                            : Icons.remove_circle_outline,
+                    color: isTransfer
+                        ? null
+                        : isIncome
+                            ? context.appColors.positive
+                            : context.appColors.negative,
                   ),
                   title: Text(r.label),
                   subtitle: Text(
@@ -130,18 +146,23 @@ class _RecurringTransactionsScreenState
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       Text(
-                        '${isIncome ? '+' : '-'}${r.amount.toStringAsFixed(2)} €',
+                        isTransfer
+                            ? '${r.amount.toStringAsFixed(2)} €'
+                            : '${isIncome ? '+' : '-'}${r.amount.toStringAsFixed(2)} €',
                         style: TextStyle(
                           fontWeight: FontWeight.bold,
-                          color: isIncome
-                              ? context.appColors.positive
-                              : context.appColors.negative,
+                          color: isTransfer
+                              ? null
+                              : isIncome
+                                  ? context.appColors.positive
+                                  : context.appColors.negative,
                         ),
                       ),
                       Switch(
                         value: r.active,
                         onChanged: (v) async {
                           await RecurringTransactionsStore.setActive(r.id, v);
+                          await RecurringWidgetService.refresh();
                           if (!mounted) return;
                           setState(() {});
                         },

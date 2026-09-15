@@ -54,7 +54,9 @@ class _SliceKey {
 
   @override
   bool operator ==(Object other) =>
-      other is _SliceKey && other.categoryId == categoryId && other.type == type;
+      other is _SliceKey &&
+      other.categoryId == categoryId &&
+      other.type == type;
 
   @override
   int get hashCode => Object.hash(categoryId, type);
@@ -155,7 +157,8 @@ class _CategoryPieChartState extends State<CategoryPieChart> {
   Widget build(BuildContext context) {
     final items = widget.transactions
         .where((t) =>
-            t.type == TransactionType.expense || t.type == TransactionType.income)
+            t.type == TransactionType.expense ||
+            t.type == TransactionType.income)
         .where((t) => switch (widget.mode) {
               PieChartMode.expenses => t.type == TransactionType.expense,
               PieChartMode.income => t.type == TransactionType.income,
@@ -191,7 +194,8 @@ class _CategoryPieChartState extends State<CategoryPieChart> {
     final details = _focused == null
         ? <Transaction>[]
         : (items
-            .where((t) => t.category == _focused!.categoryId && t.type == _focused!.type)
+            .where((t) =>
+                t.category == _focused!.categoryId && t.type == _focused!.type)
             .toList()
           ..sort((a, b) => a.amount.compareTo(b.amount)));
 
@@ -243,104 +247,110 @@ class _CategoryPieChartState extends State<CategoryPieChart> {
                     : (constraints.maxWidth / neededDiameter).clamp(0.0, 1.0);
 
                 return Stack(
-              alignment: Alignment.center,
-              children: [
-                if (focused != null && details.isNotEmpty)
-                  PieChart(
-                    PieChartData(
-                      startDegreeOffset: -90,
-                      centerSpaceRadius: focusedCenterSpace * scale,
-                      sectionsSpace: 2,
-                      sections: details.map((t) {
-                        final ratio = detailsSum == 0 ? 0 : t.amount / detailsSum;
-                        final showLabel = ratio > 0.06;
+                  alignment: Alignment.center,
+                  children: [
+                    if (focused != null && details.isNotEmpty)
+                      PieChart(
+                        PieChartData(
+                          startDegreeOffset: -90,
+                          centerSpaceRadius: focusedCenterSpace * scale,
+                          sectionsSpace: 2,
+                          sections: details.map((t) {
+                            final ratio =
+                                detailsSum == 0 ? 0 : t.amount / detailsSum;
+                            final showLabel = ratio > 0.06;
 
-                        return PieChartSectionData(
-                          value: t.amount,
-                          radius: focusedRadius * scale,
-                          color: _tintForType(
-                            _shadeFromAmount(
-                              _baseCategoryColor(focused.categoryId),
-                              t.amount,
-                              minAmount,
-                              maxAmount,
+                            return PieChartSectionData(
+                              value: t.amount,
+                              radius: focusedRadius * scale,
+                              color: _tintForType(
+                                _shadeFromAmount(
+                                  _baseCategoryColor(focused.categoryId),
+                                  t.amount,
+                                  minAmount,
+                                  maxAmount,
+                                ),
+                                focused.type,
+                              ),
+                              title: showLabel
+                                  ? widget.asPercentage
+                                      ? '${t.label}\n${(ratio * 100).toStringAsFixed(1)}%'
+                                      : '${t.label}\n${t.amount.toStringAsFixed(0)}${widget.currencySymbol}'
+                                  : '',
+                              titleStyle: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 9,
+                                fontWeight: FontWeight.w600,
+                                height: 1.2,
+                              ),
+                              titlePositionPercentageOffset: 0.6,
+                            );
+                          }).toList(),
+                        ),
+                      ),
+                    PieChart(
+                      PieChartData(
+                        startDegreeOffset: -90,
+                        centerSpaceRadius: baseCenterSpace * scale,
+                        sectionsSpace: 2,
+                        pieTouchData: PieTouchData(
+                          touchCallback: (event, response) {
+                            if (event is FlTapUpEvent &&
+                                response?.touchedSection != null) {
+                              final idx =
+                                  response!.touchedSection!.touchedSectionIndex;
+                              if (idx >= 0 && idx < slices.length) {
+                                setState(() => _focused = slices[idx].key);
+                              }
+                            }
+                          },
+                        ),
+                        sections: slices.map((e) {
+                          final ratio = totalSum == 0 ? 0 : e.value / totalSum;
+                          final label = widget.asPercentage
+                              ? '${(ratio * 100).toStringAsFixed(1)}%'
+                              : '${e.value.toStringAsFixed(0)}${widget.currencySymbol}';
+                          return PieChartSectionData(
+                            value: e.value,
+                            radius: baseRadius * scale,
+                            color: _tintForType(
+                              _shade(
+                                  _baseCategoryColor(e.key.categoryId), 0.85),
+                              e.key.type,
                             ),
-                            focused.type,
-                          ),
-                          title: showLabel
-                              ? widget.asPercentage
-                                  ? '${t.label}\n${(ratio * 100).toStringAsFixed(1)}%'
-                                  : '${t.label}\n${t.amount.toStringAsFixed(0)}${widget.currencySymbol}'
-                              : '',
-                          titleStyle: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 9,
-                            fontWeight: FontWeight.w600,
-                            height: 1.2,
-                          ),
-                          titlePositionPercentageOffset: 0.6,
-                        );
-                      }).toList(),
-                    ),
-                  ),
-                PieChart(
-                  PieChartData(
-                    startDegreeOffset: -90,
-                    centerSpaceRadius: baseCenterSpace * scale,
-                    sectionsSpace: 2,
-                    pieTouchData: PieTouchData(
-                      touchCallback: (event, response) {
-                        if (event is FlTapUpEvent &&
-                            response?.touchedSection != null) {
-                          final idx = response!.touchedSection!.touchedSectionIndex;
-                          if (idx >= 0 && idx < slices.length) {
-                            setState(() => _focused = slices[idx].key);
-                          }
-                        }
-                      },
-                    ),
-                    sections: slices.map((e) {
-                      final ratio = totalSum == 0 ? 0 : e.value / totalSum;
-                      final label = widget.asPercentage
-                          ? '${(ratio * 100).toStringAsFixed(1)}%'
-                          : '${e.value.toStringAsFixed(0)}${widget.currencySymbol}';
-                      return PieChartSectionData(
-                        value: e.value,
-                        radius: baseRadius * scale,
-                        color: _tintForType(
-                          _shade(_baseCategoryColor(e.key.categoryId), 0.85),
-                          e.key.type,
-                        ),
-                        title: widget.mode == PieChartMode.both
-                            ? '${_sign(e.key.type)}$label'
-                            : label,
-                        titleStyle: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 11,
-                          fontWeight: FontWeight.w700,
-                        ),
-                      );
-                    }).toList(),
-                  ),
-                ),
-                IgnorePointer(
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Text(
-                        focused == null ? 'Total' : _categoryName(focused.categoryId),
-                        style: const TextStyle(fontWeight: FontWeight.w600),
+                            title: widget.mode == PieChartMode.both
+                                ? '${_sign(e.key.type)}$label'
+                                : label,
+                            titleStyle: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 11,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          );
+                        }).toList(),
                       ),
-                      const SizedBox(height: 4),
-                      Text(
-                        focused == null
-                            ? '${totalSum.toStringAsFixed(0)}${widget.currencySymbol}'
-                            : '${detailsSum.toStringAsFixed(0)}${widget.currencySymbol}',
-                        style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 16),
+                    ),
+                    IgnorePointer(
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(
+                            focused == null
+                                ? 'Total'
+                                : _categoryName(focused.categoryId),
+                            style: const TextStyle(fontWeight: FontWeight.w600),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            focused == null
+                                ? '${totalSum.toStringAsFixed(0)}${widget.currencySymbol}'
+                                : '${detailsSum.toStringAsFixed(0)}${widget.currencySymbol}',
+                            style: const TextStyle(
+                                fontWeight: FontWeight.w800, fontSize: 16),
+                          ),
+                        ],
                       ),
-                    ],
-                  ),
-                ),
+                    ),
                   ],
                 );
               },

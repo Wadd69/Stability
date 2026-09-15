@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:background="@drawable/recurring_widget_background"
+    android:padding="12dp"
+    android:id="@+id/recurring_widget_container">
+
+    <TextView
+        android:id="@+id/recurring_widget_title"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="Prochaines échéances"
+        android:textSize="14sp"
+        android:textStyle="bold"
+        android:textColor="#888888" />
+
+    <TextView
+        android:id="@+id/recurring_widget_text"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="6dp"
+        android:textSize="13sp"
+        android:textColor="@color/recurring_widget_text"
+        android:lineSpacingExtra="4dp"
+        tools:text="Loyer  -750 €  (5 août)" />
+
+</LinearLayout>

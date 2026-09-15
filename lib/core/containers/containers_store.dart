@@ -21,10 +21,9 @@ class ContainersStore extends ChangeNotifier {
 
   List<ContainerModel> get all => List.unmodifiable(_containers);
 
-  List<ContainerModel> get active => _containers
-      .where((c) => !c.isArchived)
-      .toList()
-    ..sort((a, b) => a.order.compareTo(b.order));
+  List<ContainerModel> get active =>
+      _containers.where((c) => !c.isArchived).toList()
+        ..sort((a, b) => a.order.compareTo(b.order));
 
   List<ContainerModel> get archived =>
       _containers.where((c) => c.isArchived).toList();
@@ -81,6 +80,11 @@ class ContainersStore extends ChangeNotifier {
     required int colorValue,
     required ContainerType type,
     List<InterestRatePeriod>? interestRates,
+    CreditKind? creditKind,
+    double? creditOriginalAmount,
+    double? creditRemainingBalance,
+    double? creditMonthlyPayment,
+    double? creditAnnualRate,
   }) async {
     final container = ContainerModel(
       id: UniqueKey().toString(),
@@ -88,6 +92,12 @@ class ContainersStore extends ChangeNotifier {
       colorValue: colorValue,
       type: type,
       interestRates: interestRates ?? [],
+      creditKind: creditKind,
+      creditOriginalAmount: creditOriginalAmount,
+      creditRemainingBalance: creditRemainingBalance,
+      creditMonthlyPayment: creditMonthlyPayment,
+      creditAnnualRate: creditAnnualRate,
+      creditStartedAt: type == ContainerType.credit ? DateTime.now() : null,
       createdAt: DateTime.now(),
       order: _containers.length,
     );

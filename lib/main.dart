@@ -22,7 +22,10 @@ import 'core/finance/monthly_balances_store.dart';
 import 'core/budget_rules/category_allocations_store.dart';
 import 'core/budget_rules/category_goals_store.dart';
 import 'core/finance/recurring_transactions_store.dart';
+import 'core/finance/recurring_widget_service.dart';
+import 'core/finance/recurring_overrides_store.dart';
 import 'core/containers/interest_adjustments_store.dart';
+import 'equity/account_members_store.dart';
 import 'settings/app_settings_store.dart';
 import 'accounts/current_account.dart';
 import 'accounts/create_account_screen.dart';
@@ -56,12 +59,30 @@ class StabilityApp extends StatelessWidget {
       providers: [
         ChangeNotifierProvider(create: (_) => ContainersStore()),
       ],
-      child: MaterialApp(
-        title: 'Stability',
-        theme: AppTheme.light(),
-        darkTheme: AppTheme.dark(),
-        themeMode: ThemeMode.system,
-        home: const SplashGate(),
+      child: ValueListenableBuilder<AppThemeChoice>(
+        valueListenable: AppSettingsStore.themeChoiceNotifier,
+        builder: (context, choice, _) {
+          return ValueListenableBuilder<Color?>(
+            valueListenable: AppSettingsStore.accentColorNotifier,
+            builder: (context, accentColor, _) {
+              final seedColor =
+                  choice == AppThemeChoice.custom ? accentColor : null;
+              final themeMode = switch (choice) {
+                AppThemeChoice.light => ThemeMode.light,
+                AppThemeChoice.dark => ThemeMode.dark,
+                AppThemeChoice.custom => ThemeMode.system,
+              };
+              return MaterialApp(
+                title: 'Stability',
+                debugShowCheckedModeBanner: false,
+                theme: AppTheme.light(seedColor: seedColor),
+                darkTheme: AppTheme.dark(seedColor: seedColor),
+                themeMode: themeMode,
+                home: const SplashGate(),
+              );
+            },
+          );
+        },
       ),
     );
   }
@@ -82,13 +103,18 @@ Future<void> loadAccountData(BuildContext context) async {
   await CategoryGoalsStore.init();
   await RecurringTransactionsStore.init();
   await InterestAdjustmentsStore.init();
+  await AccountMembersStore.init();
+  await RecurringOverridesStore.init();
 
   // Rattrape les récurrences dues pour le mois actif (premier lancement
   // sur ce compte, ou nouveau gabarit créé alors que le mois était déjà
   // en cours).
   await RecurringTransactionsStore.generateDueForMonth(
     ActiveMonthStore.current,
+    context.read<ContainersStore>(),
   );
+
+  await RecurringWidgetService.refresh();
 }
 
 /// Affiche l'écran de lancement animé une fois au démarrage, puis laisse
@@ -107,7 +133,8 @@ class _SplashGateState extends State<SplashGate> {
   @override
   Widget build(BuildContext context) {
     if (_showSplash) {
-      return SplashScreen(onFinished: () => setState(() => _showSplash = false));
+      return SplashScreen(
+          onFinished: () => setState(() => _showSplash = false));
     }
     return const AppRoot();
   }

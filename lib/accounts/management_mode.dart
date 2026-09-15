@@ -1,7 +1,8 @@
 enum ManagementMode {
-  free,        // suivi simple
-  zeroBudget,  // budget base zéro
-  fiftyThirtyTwenty,
+  free, // suivi simple
+  zeroBudget, // budget base zéro
+  fiftyThirtyTwenty, // pourcentages personnalisés (anciennement 50/30/20 figé)
+  payYourselfFirst, // paie-toi en premier
   custom,
 }
 
@@ -13,7 +14,9 @@ extension ManagementModeLabel on ManagementMode {
       case ManagementMode.zeroBudget:
         return 'Budget base zéro';
       case ManagementMode.fiftyThirtyTwenty:
-        return 'Règle 50 / 30 / 20';
+        return 'Pourcentages personnalisés';
+      case ManagementMode.payYourselfFirst:
+        return 'Paie-toi en premier';
       case ManagementMode.custom:
         return 'Personnalisé';
     }
@@ -27,7 +30,11 @@ extension ManagementModeLabel on ManagementMode {
         return 'Chaque euro de revenu est alloué à une catégorie jusqu\'à '
             'ce qu\'il ne reste rien à répartir.';
       case ManagementMode.fiftyThirtyTwenty:
-        return '50% besoins essentiels, 30% envies, 20% épargne/dettes.';
+        return 'Répartissez votre revenu en enveloppes à vos propres '
+            'pourcentages (ex: 50/30/20, ou tout autre découpage).';
+      case ManagementMode.payYourselfFirst:
+        return 'Un pourcentage de votre revenu part en épargne en premier, '
+            'le reste est libre.';
       case ManagementMode.custom:
         return 'Méthode personnalisée (pas encore disponible).';
     }
@@ -48,12 +55,17 @@ extension ManagementModeLabel on ManagementMode {
             'Cette méthode force à anticiper chaque dépense à l\'avance '
             'plutôt que de constater après coup où l\'argent est parti.';
       case ManagementMode.fiftyThirtyTwenty:
-        return 'Une règle simple pour démarrer sans passer par une '
-            'planification détaillée : 50% de votre revenu pour les '
-            'besoins essentiels (loyer, courses, factures), 30% pour les '
-            'envies (loisirs, sorties), et 20% pour l\'épargne ou le '
-            'remboursement de dettes. Moins précis que le budget base '
-            'zéro, mais plus rapide à mettre en place.';
+        return 'Vous définissez vos propres enveloppes (nom et '
+            'pourcentage du revenu) — par exemple 50% besoins essentiels, '
+            '30% envies, 20% épargne, ou tout autre découpage qui vous '
+            'convient. Moins précis que le budget base zéro, mais plus '
+            'rapide à mettre en place, et modifiable à tout moment.';
+      case ManagementMode.payYourselfFirst:
+        return 'Dès que le revenu du mois est connu, un pourcentage fixe '
+            'part automatiquement en épargne — avant toute autre dépense. '
+            'Le reste de l\'argent est géré librement, sans suivi détaillé '
+            'poste par poste. Un bon compromis entre "Suivi libre" (aucune '
+            'structure) et "Budget base zéro" (structure complète).';
       case ManagementMode.custom:
         return 'Cette méthode n\'est pas encore disponible. Elle vous '
             'permettra plus tard de définir vos propres règles de '

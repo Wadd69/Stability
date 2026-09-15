@@ -24,6 +24,7 @@ import '../archives/archives_screen.dart';
 
 import '../containers/containers_screen.dart';
 import '../core/containers/containers_store.dart';
+import '../core/finance/transaction_analysis.dart';
 import '../core/containers/container_model.dart';
 
 // ✅ AJOUTS UNIQUES
@@ -34,22 +35,37 @@ import '../core/containers/container_interests_screen.dart';
 import '../core/containers/container_insurance_life_screen.dart';
 import '../core/containers/container_retirement_screen.dart';
 import '../core/containers/container_investment_screen.dart';
+import '../core/containers/container_credit_screen.dart';
 import '../core/containers/capitalization_engine.dart';
 import '../settings/settings_screen.dart';
+import '../settings/beta_feedback_screen.dart';
 
 import '../core/finance/active_month_store.dart';
 import '../core/budget_rules/category_allocations_store.dart';
 import '../core/budget_rules/budget_screen.dart';
 import '../core/budget_rules/fifty_thirty_twenty_screen.dart';
+import '../core/budget_rules/pay_yourself_first_screen.dart';
 import '../core/budget_rules/custom_mode_placeholder_screen.dart';
-import '../core/budget_rules/budget_automation_service.dart';
-import '../core/budget_rules/launch_month_budget_screen.dart';
 import '../accounts/management_mode.dart';
 import '../core/finance/recurring_transactions_store.dart';
 import '../core/finance/recurring_transactions_screen.dart';
+import '../core/finance/recurring_widget_service.dart';
 import '../core/finance/transactions_list_screen.dart';
 import '../patrimoine/net_worth_screen.dart';
 import '../theme/app_colors.dart';
+import '../settings/app_settings_store.dart';
+import '../onboarding/dashboard_tutorial_screen.dart';
+import '../shared/category_pie_chart.dart';
+import '../equity/equity_hub_screen.dart';
+import 'forecast_screen.dart';
+
+/// Catalogue des blocs optionnels affichables sur le dashboard, activables
+/// et réordonnables depuis "Personnaliser le dashboard" (tiroir latéral).
+const Map<String, String> kDashboardBlockLabels = {
+  'alert': 'Alerte de dépassement de budget',
+  'pie': 'Mini camembert des dépenses du mois',
+  'recurring': 'Transactions récurrentes',
+};
 
 class DashboardScreen extends StatefulWidget {
   const DashboardScreen({super.key});
@@ -80,6 +96,20 @@ class _DashboardScreenState extends State<DashboardScreen> {
       );
     });
     _syncRealtimeSubscription();
+
+    // Mini-tuto une seule fois, à la toute première arrivée sur le
+    // dashboard (juste après la création du premier compte) — pas liée à
+    // la création d'un support en particulier.
+    if (!AppSettingsStore.hasSeenDashboardTutorial) {
+      AppSettingsStore.setHasSeenDashboardTutorial(true);
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        Navigator.push(
+          context,
+          MaterialPageRoute(builder: (_) => const DashboardTutorialScreen()),
+        );
+      });
+    }
   }
 
   @override
@@ -135,8 +165,18 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
   String _monthLabel(DateTime d) {
     const months = [
-      'Janv.', 'Févr.', 'Mars', 'Avr.', 'Mai', 'Juin',
-      'Juil.', 'Août', 'Sept.', 'Oct.', 'Nov.', 'Déc.'
+      'Janv.',
+      'Févr.',
+      'Mars',
+      'Avr.',
+      'Mai',
+      'Juin',
+      'Juil.',
+      'Août',
+      'Sept.',
+      'Oct.',
+      'Nov.',
+      'Déc.'
     ];
     return '${months[d.month - 1]} ${d.year.toString().substring(2)}';
   }
@@ -169,8 +209,384 @@ class _DashboardScreenState extends State<DashboardScreen> {
     setState(() {});
   }
 
-  /// 🔹 Icône(s) du dashboard propres au mode de gestion du compte actif.
-  /// C'est ici que l'interface s'adapte réellement selon la méthode choisie.
+  /// Ouvre l'écran de budget propre au mode de gestion actif (budget base
+  /// zéro ou 50/30/20) — utilisé à la fois par l'icône de navigation et par
+  /// la bannière de dépassement du dashboard.
+  void _openModeBudgetScreen() {
+    switch (CurrentAccount.active.managementMode) {
+      case ManagementMode.zeroBudget:
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (_) => BudgetScreen(
+              monthKey: ActiveMonthStore.current,
+              monthLabel: _monthLabel(
+                _dateFromMonthKey(ActiveMonthStore.current),
+              ),
+            ),
+          ),
+        ).then((_) => setState(() {}));
+        return;
+      case ManagementMode.fiftyThirtyTwenty:
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (_) => FiftyThirtyTwentyScreen(
+              monthKey: ActiveMonthStore.current,
+              monthLabel: _monthLabel(
+                _dateFromMonthKey(ActiveMonthStore.current),
+              ),
+            ),
+          ),
+        ).then((_) => setState(() {}));
+        return;
+      case ManagementMode.payYourselfFirst:
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (_) => PayYourselfFirstScreen(
+              monthKey: ActiveMonthStore.current,
+              monthLabel: _monthLabel(
+                _dateFromMonthKey(ActiveMonthStore.current),
+              ),
+            ),
+          ),
+        ).then((_) => setState(() {}));
+        return;
+      case ManagementMode.free:
+      case ManagementMode.custom:
+        Navigator.push(
+          context,
+          MaterialPageRoute(builder: (_) => CategoriesScreen()),
+        ).then((_) => setState(() {}));
+        return;
+    }
+  }
+
+  /// Rubriques (budget base zéro ou budget mensuel facultatif en mode libre/
+  /// personnalisé) ou enveloppes (50/30/20) en dépassement ce mois-ci, pour
+  /// la bannière d'alerte du dashboard.
+  List<String> _overBudgetLines() {
+    final activeKey = ActiveMonthStore.current;
+
+    switch (CurrentAccount.active.managementMode) {
+      case ManagementMode.zeroBudget:
+        return CategoriesStore.all
+            .map((c) => MapEntry(
+                c, CategoryAllocationsStore.remaining(activeKey, c.id)))
+            .where((e) => e.value < 0)
+            .map((e) => '${e.key.name} (${e.value.toStringAsFixed(0)} €)')
+            .toList();
+
+      case ManagementMode.fiftyThirtyTwenty:
+        final income = CategoryAllocationsStore.getPlannedIncome(activeKey);
+        if (income <= 0) return [];
+
+        final spentByBucket = <String, double>{};
+        for (final t in TransactionsStore.transactionsForMonth(activeKey).where(
+            (t) => t.type == TransactionType.expense && t.transferId == null)) {
+          final bucketId = t.category != null
+              ? CategoriesStore.getById(t.category!)?.bucketId
+              : null;
+          if (bucketId == null) continue;
+          spentByBucket[bucketId] = (spentByBucket[bucketId] ?? 0) + t.amount;
+        }
+
+        return CurrentAccount.active.effectiveBuckets.where((b) {
+          final target = income * b.targetShare;
+          return (spentByBucket[b.id] ?? 0) > target;
+        }).map((b) {
+          final target = income * b.targetShare;
+          final over = (spentByBucket[b.id] ?? 0) - target;
+          return '${b.name} (+${over.toStringAsFixed(0)} €)';
+        }).toList();
+
+      case ManagementMode.free:
+      case ManagementMode.payYourselfFirst:
+      case ManagementMode.custom:
+        // Pas d'allocation obligatoire ici : seules les rubriques où
+        // l'utilisateur a défini un budget mensuel facultatif (via l'écran
+        // Rubriques) sont prises en compte, sinon tout apparaîtrait comme
+        // "dépassé" par défaut.
+        return CategoriesStore.all
+            .map((c) => MapEntry(
+                c, CategoryAllocationsStore.getAllocated(activeKey, c.id)))
+            .where((e) => e.value > 0)
+            .map((e) => MapEntry(
+                e.key, CategoryAllocationsStore.remaining(activeKey, e.key.id)))
+            .where((e) => e.value < 0)
+            .map((e) => '${e.key.name} (${e.value.toStringAsFixed(0)} €)')
+            .toList();
+    }
+  }
+
+  /// Construit le bloc optionnel [id] pour le dashboard, ou `null` s'il n'y
+  /// a rien à afficher (ex: alerte sans dépassement ce mois-ci).
+  Widget? _buildDashboardBlock({
+    required String id,
+    required List<String> overBudget,
+    required String activeKey,
+  }) {
+    switch (id) {
+      case 'alert':
+        if (overBudget.isEmpty) return null;
+        return Padding(
+          padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+          child: InkWell(
+            borderRadius: BorderRadius.circular(8),
+            onTap: _openModeBudgetScreen,
+            child: Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: context.appColors.negative.withValues(alpha: 0.1),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(
+                  color: context.appColors.negative.withValues(alpha: 0.3),
+                ),
+              ),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Icon(
+                    Icons.warning_amber_rounded,
+                    color: context.appColors.negative,
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'Budget dépassé : ${overBudget.join(' · ')}',
+                      style: TextStyle(
+                        color: context.appColors.negative,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        );
+
+      case 'pie':
+        return Padding(
+          padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+          child: CategoryPieChart(
+            transactions: TransactionAnalysis.filterForAnalysis(
+              TransactionsStore.transactionsForMonth(activeKey),
+              context.read<ContainersStore>(),
+            ),
+            mode: PieChartMode.expenses,
+          ),
+        );
+
+      case 'recurring':
+        final active =
+            RecurringTransactionsStore.all.where((r) => r.active).toList();
+        return Padding(
+          padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+          child: InkWell(
+            borderRadius: BorderRadius.circular(8),
+            onTap: () async {
+              await Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => const RecurringTransactionsScreen(),
+                ),
+              );
+              if (!mounted) return;
+              setState(() {});
+            },
+            child: Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Theme.of(context).colorScheme.surfaceContainerHighest,
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Row(
+                children: [
+                  const Icon(Icons.event_repeat),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      active.isEmpty
+                          ? 'Aucune transaction récurrente configurée'
+                          : '${active.length} transaction'
+                              '${active.length > 1 ? 's' : ''} récurrente'
+                              '${active.length > 1 ? 's' : ''} active'
+                              '${active.length > 1 ? 's' : ''}',
+                    ),
+                  ),
+                  const Icon(Icons.chevron_right),
+                ],
+              ),
+            ),
+          ),
+        );
+
+      default:
+        return null;
+    }
+  }
+
+  /// Ouvre le sélecteur de blocs optionnels du dashboard : activer/désactiver
+  /// et réordonner (glisser-déposer). Enregistré localement sur l'appareil.
+  Future<void> _openDashboardCustomization() async {
+    final order = List<String>.from(AppSettingsStore.dashboardBlocks);
+    for (final id in kDashboardBlockLabels.keys) {
+      if (!order.contains(id)) order.add(id);
+    }
+    final enabled = AppSettingsStore.dashboardBlocks.toSet();
+
+    final allContainers = context.read<ContainersStore>().active;
+    final hiddenContainers =
+        Set<String>.from(AppSettingsStore.dashboardHiddenContainerIds);
+
+    await showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      builder: (_) => StatefulBuilder(
+        builder: (context, setModalState) => DraggableScrollableSheet(
+          expand: false,
+          initialChildSize: 0.9,
+          maxChildSize: 0.95,
+          builder: (context, scrollController) => SafeArea(
+            child: ListView(
+              controller: scrollController,
+              padding: const EdgeInsets.only(top: 8, bottom: 24),
+              children: [
+                // Poignée visuelle : indique que la feuille se glisse pour
+                // voir plus de contenu (pas évident sans elle).
+                Center(
+                  child: Container(
+                    width: 40,
+                    height: 4,
+                    margin: const EdgeInsets.only(bottom: 12),
+                    decoration: BoxDecoration(
+                      color: Theme.of(context)
+                          .colorScheme
+                          .onSurfaceVariant
+                          .withValues(alpha: 0.4),
+                      borderRadius: BorderRadius.circular(2),
+                    ),
+                  ),
+                ),
+                const Padding(
+                  padding: EdgeInsets.symmetric(horizontal: 16),
+                  child: Text(
+                    'Personnaliser le dashboard',
+                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
+                  ),
+                ),
+                const Padding(
+                  padding: EdgeInsets.fromLTRB(16, 4, 16, 8),
+                  child: Text(
+                    'Activez les blocs à afficher et glissez-les pour '
+                    'choisir leur ordre.',
+                    style: TextStyle(fontSize: 12),
+                  ),
+                ),
+                SizedBox(
+                  height: order.length * 64.0,
+                  child: ReorderableListView(
+                    shrinkWrap: true,
+                    physics: const NeverScrollableScrollPhysics(),
+                    onReorder: (oldIndex, newIndex) {
+                      setModalState(() {
+                        if (newIndex > oldIndex) newIndex -= 1;
+                        final id = order.removeAt(oldIndex);
+                        order.insert(newIndex, id);
+                      });
+                    },
+                    children: [
+                      for (final entry in order.asMap().entries)
+                        ListTile(
+                          key: ValueKey(entry.value),
+                          // Le handle est le seul point de départ du glisser
+                          // : le laisser sur toute la ligne entre en
+                          // conflit avec le geste du Switch et empêche de
+                          // faire glisser les lignes qui suivent.
+                          leading: ReorderableDragStartListener(
+                            index: entry.key,
+                            child: const Icon(Icons.drag_handle),
+                          ),
+                          title: Text(kDashboardBlockLabels[entry.value] ??
+                              entry.value),
+                          trailing: Switch(
+                            value: enabled.contains(entry.value),
+                            onChanged: (v) => setModalState(() {
+                              if (v) {
+                                enabled.add(entry.value);
+                              } else {
+                                enabled.remove(entry.value);
+                              }
+                            }),
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+                if (allContainers.isNotEmpty) ...[
+                  const Divider(height: 32),
+                  const Padding(
+                    padding: EdgeInsets.symmetric(horizontal: 16),
+                    child: Text(
+                      'Supports affichés',
+                      style:
+                          TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+                    ),
+                  ),
+                  const Padding(
+                    padding: EdgeInsets.fromLTRB(16, 4, 16, 8),
+                    child: Text(
+                      'Choisissez les supports visibles dans la liste du '
+                      'dashboard. Ça n\'affecte que l\'affichage : rien '
+                      'n\'est supprimé ni exclu des calculs.',
+                      style: TextStyle(fontSize: 12),
+                    ),
+                  ),
+                  for (final c in allContainers)
+                    SwitchListTile(
+                      title: Text(c.name),
+                      value: !hiddenContainers.contains(c.id),
+                      onChanged: (v) => setModalState(() {
+                        if (v) {
+                          hiddenContainers.remove(c.id);
+                        } else {
+                          hiddenContainers.add(c.id);
+                        }
+                      }),
+                    ),
+                ],
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
+                  child: SizedBox(
+                    width: double.infinity,
+                    child: ElevatedButton(
+                      onPressed: () {
+                        AppSettingsStore.setDashboardBlocks(
+                          order.where(enabled.contains).toList(),
+                        );
+                        AppSettingsStore.setDashboardHiddenContainerIds(
+                          hiddenContainers,
+                        );
+                        Navigator.pop(context);
+                      },
+                      child: const Text('Enregistrer'),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+
+    if (!mounted) return;
+    setState(() {});
+  }
+
+  /// Icône(s) du dashboard propres au mode de gestion du compte actif.
   List<Widget> _modeSpecificIcons() {
     switch (CurrentAccount.active.managementMode) {
       case ManagementMode.zeroBudget:
@@ -178,40 +594,25 @@ class _DashboardScreenState extends State<DashboardScreen> {
           IconButton(
             tooltip: 'Budget',
             icon: const Icon(Icons.account_balance_wallet),
-            onPressed: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (_) => BudgetScreen(
-                    monthKey: ActiveMonthStore.current,
-                    monthLabel: _monthLabel(
-                      _dateFromMonthKey(ActiveMonthStore.current),
-                    ),
-                  ),
-                ),
-              ).then((_) => setState(() {}));
-            },
+            onPressed: _openModeBudgetScreen,
           ),
         ];
 
       case ManagementMode.fiftyThirtyTwenty:
         return [
           IconButton(
-            tooltip: '50/30/20',
+            tooltip: 'Pourcentages personnalisés',
             icon: const Icon(Icons.pie_chart_outline),
-            onPressed: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (_) => FiftyThirtyTwentyScreen(
-                    monthKey: ActiveMonthStore.current,
-                    monthLabel: _monthLabel(
-                      _dateFromMonthKey(ActiveMonthStore.current),
-                    ),
-                  ),
-                ),
-              ).then((_) => setState(() {}));
-            },
+            onPressed: _openModeBudgetScreen,
+          ),
+        ];
+
+      case ManagementMode.payYourselfFirst:
+        return [
+          IconButton(
+            tooltip: 'Paie-toi en premier',
+            icon: const Icon(Icons.savings_outlined),
+            onPressed: _openModeBudgetScreen,
           ),
         ];
 
@@ -318,6 +719,26 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     screenBuilder: () => const RecurringTransactionsScreen(),
                     refreshOnReturn: true,
                   ),
+                  if (account.isShared)
+                    destinationTile(
+                      icon: Icons.balance,
+                      label: 'Équité',
+                      screenBuilder: () => const EquityHubScreen(),
+                      refreshOnReturn: true,
+                    ),
+                  ListTile(
+                    leading: const Icon(Icons.dashboard_customize),
+                    title: const Text('Personnaliser le dashboard'),
+                    onTap: () {
+                      Navigator.pop(context);
+                      _openDashboardCustomization();
+                    },
+                  ),
+                  destinationTile(
+                    icon: Icons.feedback_outlined,
+                    label: 'Bêta & retours',
+                    screenBuilder: () => const BetaFeedbackScreen(),
+                  ),
                   destinationTile(
                     icon: Icons.settings,
                     label: 'Réglages',
@@ -367,96 +788,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
   }
 
-  void _openBudgetAutomationMenu() {
-    final monthKey = ActiveMonthStore.current;
-    showModalBottomSheet(
-      context: context,
-      builder: (_) => Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          ListTile(
-            leading: const Icon(Icons.bolt),
-            title: const Text('Lancer le budget du mois'),
-            subtitle: const Text(
-              'Crée les virements automatiques vers vos supports configurés',
-            ),
-            onTap: () async {
-              Navigator.pop(context);
-              await Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (_) => LaunchMonthBudgetScreen(
-                    monthKey: monthKey,
-                    monthLabel: _monthLabel(_dateFromMonthKey(monthKey)),
-                  ),
-                ),
-              );
-              setState(() {});
-            },
-          ),
-          ListTile(
-            leading: const Icon(Icons.done_all),
-            title: const Text('Valider les virements'),
-            subtitle: const Text(
-              'Marque comme pointés tous les virements du budget du mois',
-            ),
-            onTap: () {
-              Navigator.pop(context);
-              _confirmValidateTransfers(monthKey);
-            },
-          ),
-        ],
-      ),
-    );
-  }
-
-  Future<void> _confirmValidateTransfers(String monthKey) async {
-    if (!BudgetAutomationService.hasPendingTransfers(monthKey)) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Aucun virement en attente ce mois-ci.')),
-      );
-      return;
-    }
-
-    final ok = await showDialog<bool>(
-      context: context,
-      builder: (_) => AlertDialog(
-        title: const Text('Valider les virements'),
-        content: const Text(
-          'Tous les virements du budget du mois seront marqués comme '
-          'pointés. Vous pourrez toujours en modifier un individuellement '
-          'ensuite.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('Annuler'),
-          ),
-          ElevatedButton(
-            onPressed: () => Navigator.pop(context, true),
-            child: const Text('Valider'),
-          ),
-        ],
-      ),
-    );
-
-    if (ok != true) return;
-    if (!mounted) return;
-
-    final count = await BudgetAutomationService.validateTransfers(monthKey);
-    setState(() {});
-    if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('$count virement${count > 1 ? 's' : ''} validé${count > 1 ? 's' : ''}.')),
-    );
-  }
-
   Future<void> _confirmCloseMonth() async {
     final currentKey = ActiveMonthStore.current;
     final nextKey = _nextMonthKey(currentKey);
 
     final tx = TransactionsStore.transactionsForMonth(currentKey);
-    if (tx.isEmpty) return;
 
     final ok = await showDialog<bool>(
       context: context,
@@ -495,31 +831,93 @@ class _DashboardScreenState extends State<DashboardScreen> {
         .map((c) => c.id)
         .toSet();
 
-    for (final t in tx) {
-      final cid = t.containerId;
-      if (cid == null) continue;
+    Future<void> runCloseMonth() async {
+      for (final t in tx) {
+        final cid = t.containerId;
+        if (cid == null) continue;
 
-      final isCurrentAccount = currentAccountIds.contains(cid);
+        final isCurrentAccount = currentAccountIds.contains(cid);
 
-      if (!isCurrentAccount && !t.isCleared) {
-        await TransactionsStore.toggleCleared(t.id);
+        if (!isCurrentAccount && !t.isCleared) {
+          await TransactionsStore.toggleCleared(t.id);
+        }
       }
+      // ─────────────────────────────────────────
+
+      await TransactionsStore.closeMonth(
+        monthKey: currentKey,
+        nextMonthKey: nextKey,
+        containersStore: containersStore,
+      );
+
+      await CategoryAllocationsStore.closeMonth(
+        monthKey: currentKey,
+        nextMonthKey: nextKey,
+        categoryIds: CategoriesStore.all.map((c) => c.id).toList(),
+      );
+
+      await ActiveMonthStore.set(nextKey);
+      await RecurringTransactionsStore.generateDueForMonth(
+        nextKey,
+        containersStore,
+      );
+      await RecurringWidgetService.refresh();
     }
-    // ─────────────────────────────────────────
 
-    await TransactionsStore.closeMonth(
-      monthKey: currentKey,
-      nextMonthKey: nextKey,
-    );
+    try {
+      await runCloseMonth();
+    } catch (e) {
+      // Premier essai après une longue inactivité de l'app : rejet RLS
+      // ponctuel observé (le second essai, identique, passe toujours).
+      // Les étapes ci-dessus sont sans effet si déjà appliquées (on ne
+      // repointe pas ce qui l'est déjà), donc un nouvel essai complet est
+      // sûr. Si ça échoue à nouveau, on affiche l'erreur réelle.
+      if (e.toString().contains('row-level security')) {
+        try {
+          await runCloseMonth();
+          if (!mounted) return;
+          setState(() {});
+          return;
+        } catch (e2) {
+          if (!mounted) return;
+          await showDialog<void>(
+            context: context,
+            builder: (_) => AlertDialog(
+              title: const Text('Échec de la clôture du mois'),
+              content: SelectableText(e2.toString()),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(context),
+                  child: const Text('OK'),
+                ),
+              ],
+            ),
+          );
+          if (!mounted) return;
+          setState(() {});
+          return;
+        }
+      }
 
-    await CategoryAllocationsStore.closeMonth(
-      monthKey: currentKey,
-      nextMonthKey: nextKey,
-      categoryIds: CategoriesStore.all.map((c) => c.id).toList(),
-    );
-
-    await ActiveMonthStore.set(nextKey);
-    await RecurringTransactionsStore.generateDueForMonth(nextKey);
+      // La clôture touche plusieurs stores en plusieurs appels réseau
+      // successifs : sans ça, un échec au milieu de la séquence (ex: perte
+      // réseau) échouait silencieusement, sans indice sur ce qui avait
+      // réellement été appliqué ou non.
+      if (!mounted) return;
+      await showDialog<void>(
+        context: context,
+        builder: (_) => AlertDialog(
+          title: const Text('Échec de la clôture du mois'),
+          content: SelectableText(e.toString()),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('OK'),
+            ),
+          ],
+        ),
+      );
+    }
 
     if (!mounted) return;
     setState(() {});
@@ -541,9 +939,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 .where((t) => t.containerId == primary.id && !t.isCarryOver)
                 .fold<double>(
                   0,
-                  (s, t) =>
-                      t.type == TransactionType.income ? s + t.amount : s - t.amount,
+                  (s, t) => t.type == TransactionType.income
+                      ? s + t.amount
+                      : s - t.amount,
                 );
+
+    final overBudget = _overBudgetLines();
 
     return Scaffold(
       appBar: AppBar(
@@ -623,11 +1024,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
               ),
               ..._modeSpecificIcons(),
               IconButton(
-                tooltip: 'Automatisation budget',
-                icon: const Icon(Icons.bolt),
-                onPressed: _openBudgetAutomationMenu,
-              ),
-              IconButton(
                 tooltip: 'Ajouter',
                 icon: const Icon(Icons.add_circle),
                 onPressed: _openAddMenu,
@@ -649,6 +1045,16 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 },
               ),
               IconButton(
+                tooltip: 'Prévision du mois suivant',
+                icon: const Icon(Icons.visibility_outlined),
+                onPressed: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (_) => const ForecastScreen()),
+                  );
+                },
+              ),
+              IconButton(
                 tooltip: 'Clôturer le mois',
                 icon: const Icon(Icons.double_arrow),
                 onPressed: _confirmCloseMonth,
@@ -657,40 +1063,47 @@ class _DashboardScreenState extends State<DashboardScreen> {
           ),
         ),
       ),
-      body: Column(
-        children: [
-          Padding(
-            padding: const EdgeInsets.symmetric(vertical: 16),
-            child: Column(
-              children: [
-                Text(
-                  _monthLabel(activeDate),
-                  style: const TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.w600,
+      body: SingleChildScrollView(
+        child: Column(
+          children: [
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 16),
+              child: Column(
+                children: [
+                  Text(
+                    _monthLabel(activeDate),
+                    style: const TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.w600,
+                    ),
                   ),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  displayedBalance == null
-                      ? '—'
-                      : '${displayedBalance.toStringAsFixed(2)} €',
-                  style: const TextStyle(
-                    fontSize: 22,
-                    fontWeight: FontWeight.bold,
+                  const SizedBox(height: 4),
+                  Text(
+                    displayedBalance == null
+                        ? '—'
+                        : '${displayedBalance.toStringAsFixed(2)} €',
+                    style: const TextStyle(
+                      fontSize: 22,
+                      fontWeight: FontWeight.bold,
+                    ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
-          ),
-          const Divider(),
-          Expanded(
-            child: _DashboardContainersAndTransactions(
+            ...AppSettingsStore.dashboardBlocks
+                .map((id) => _buildDashboardBlock(
+                      id: id,
+                      overBudget: overBudget,
+                      activeKey: activeKey,
+                    ))
+                .whereType<Widget>(),
+            const Divider(),
+            _DashboardContainersAndTransactions(
               monthKey: activeKey,
               onChanged: () => setState(() {}),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -768,247 +1181,256 @@ class _DashboardContainersAndTransactionsState
 
   @override
   Widget build(BuildContext context) {
-    final containers = context.watch<ContainersStore>().active;
+    final allContainers = context.watch<ContainersStore>().active;
+    final hidden = AppSettingsStore.dashboardHiddenContainerIds;
+    final containers =
+        allContainers.where((c) => !hidden.contains(c.id)).toList();
     final transactions =
         TransactionsStore.transactionsForMonth(widget.monthKey);
 
+    if (allContainers.isEmpty) {
+      return const Padding(
+        padding: EdgeInsets.all(24),
+        child: Center(child: Text('Aucun support')),
+      );
+    }
     if (containers.isEmpty) {
-      return const Center(child: Text('Aucun support'));
+      return const Padding(
+        padding: EdgeInsets.all(24),
+        child: Center(
+          child: Text(
+            'Tous les supports sont masqués sur ce dashboard.\n'
+            'Réglez-les depuis "Personnaliser le dashboard".',
+            textAlign: TextAlign.center,
+          ),
+        ),
+      );
     }
 
-    return SingleChildScrollView(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Padding(
-            padding: EdgeInsets.fromLTRB(16, 8, 16, 4),
-            child: Text(
-              'Supports',
-              style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
-            ),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Padding(
+          padding: EdgeInsets.fromLTRB(16, 8, 16, 4),
+          child: Text(
+            'Supports',
+            style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
           ),
-          const Divider(height: 1),
-          ...containers.map((container) {
-            // 🔹 Supports à écran dédié : ouverture directe au tap,
-            // pas besoin d'avoir déjà une transaction dessus pour y accéder.
-            if (container.type == ContainerType.insuranceLife ||
-                container.type == ContainerType.retirementAccount ||
-                container.type == ContainerType.investmentAccount) {
-              return _DedicatedContainerTile(container: container);
-            }
+        ),
+        const Divider(height: 1),
+        ...containers.map((container) {
+          // 🔹 Supports à écran dédié : ouverture directe au tap,
+          // pas besoin d'avoir déjà une transaction dessus pour y accéder.
+          if (container.type == ContainerType.insuranceLife ||
+              container.type == ContainerType.retirementAccount ||
+              container.type == ContainerType.investmentAccount ||
+              container.type == ContainerType.credit) {
+            return _DedicatedContainerTile(container: container);
+          }
 
-            final bool isPointable =
-                container.type == ContainerType.currentAccount;
+          final bool isPointable =
+              container.type == ContainerType.currentAccount;
 
-            // 🔹 Réserves permanentes (épargne, projet, espèces, autre) :
-            // pas de cycle mensuel — on affiche tout l'historique du
-            // support, sinon son contenu "disparaît" dès qu'un mois est
-            // clôturé et que ses mouvements sont archivés.
-            final bool isStandingReserve =
-                container.type == ContainerType.savingsAccount ||
-                    container.type == ContainerType.projectFund ||
-                    container.type == ContainerType.cash ||
-                    container.type == ContainerType.other;
+          // 🔹 Réserves permanentes (épargne, projet, espèces, autre) :
+          // pas de cycle mensuel — on affiche tout l'historique du
+          // support, sinon son contenu "disparaît" dès qu'un mois est
+          // clôturé et que ses mouvements sont archivés.
+          final bool isStandingReserve =
+              container.type == ContainerType.savingsAccount ||
+                  container.type == ContainerType.projectFund ||
+                  container.type == ContainerType.cash ||
+                  container.type == ContainerType.other;
 
-            final containerTx = isStandingReserve
-                ? TransactionsStore.historyByContainer(container.id)
-                : transactions
-                    .where((t) => t.containerId == container.id)
-                    .toList();
+          final containerTx = isStandingReserve
+              ? TransactionsStore.historyByContainer(container.id)
+              : transactions
+                  .where((t) => t.containerId == container.id)
+                  .toList();
 
-            final opening = isStandingReserve
-                ? 0.0
-                : MonthlyBalancesStore.getOpeningBalance(
-                    widget.monthKey,
-                    container.id,
-                  );
-
-            final movements = containerTx
-                .where((t) => !t.isCarryOver)
-                .fold<double>(
-                  0,
-                  (sum, t) =>
-                      t.type == TransactionType.income
-                          ? sum + t.amount
-                          : sum - t.amount,
+          final opening = isStandingReserve
+              ? 0.0
+              : MonthlyBalancesStore.getOpeningBalance(
+                  widget.monthKey,
+                  container.id,
                 );
 
-            final total = opening + movements;
+          final movements =
+              containerTx.where((t) => !t.isCarryOver).fold<double>(
+                    0,
+                    (sum, t) => t.type == TransactionType.income
+                        ? sum + t.amount
+                        : sum - t.amount,
+                  );
 
-            if (containerTx.isEmpty && opening == 0) {
-              return ListTile(
-                leading:
-                    CircleAvatar(radius: 6, backgroundColor: container.color),
-                title: Text(container.name),
-                trailing: const Text('0.00 €'),
-              );
-            }
+          final total = opening + movements;
 
-            final Map<String?, List<Transaction>> byCat = {};
-            for (final t in containerTx) {
-              byCat.putIfAbsent(t.category, () => []).add(t);
-            }
-
-            return ExpansionTile(
-              tilePadding: const EdgeInsets.symmetric(horizontal: 16),
+          if (containerTx.isEmpty && opening == 0) {
+            return ListTile(
               leading:
                   CircleAvatar(radius: 6, backgroundColor: container.color),
-
-              // 🔹 BOUTONS CONTENEUR
-              title: Row(
-                children: [
-                  Expanded(child: Text(container.name)),
-
-                  if (container.type == ContainerType.savingsAccount)
-                    IconButton(
-                      icon: const Icon(Icons.trending_up),
-                      onPressed: () {
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (_) =>
-                                ContainerInterestsScreen(container: container),
-                          ),
-                        );
-                      },
-                    ),
-
-                ],
-              ),
-
-              trailing: Text(
-                '${total.toStringAsFixed(2)} €',
-                style: TextStyle(
-                  fontWeight: FontWeight.bold,
-                  color: total > 0
-                      ? context.appColors.positive
-                      : total < 0
-                          ? context.appColors.negative
-                          : Theme.of(context).colorScheme.onSurface,
-                ),
-              ),
-              children: [
-                ...byCat.entries.map((entry) {
-                  final catId = entry.key;
-                  final list = entry.value;
-
-                  final catName = catId == null
-                      ? 'Sans catégorie'
-                      : (CategoriesStore.getById(catId)?.name ??
-                          'Catégorie supprimée');
-
-                  final amount = list
-                      .where((t) => !t.isCarryOver)
-                      .fold<double>(
-                        0,
-                        (s, t) => t.type == TransactionType.income
-                            ? s + t.amount
-                            : s - t.amount,
-                      );
-
-                  return ExpansionTile(
-                    tilePadding: const EdgeInsets.symmetric(horizontal: 32),
-                    title: Text(catName),
-                    trailing: Text(
-                      '${amount.toStringAsFixed(2)} €',
-                      style: TextStyle(
-                        fontWeight: FontWeight.w600,
-                        color: amount > 0
-                            ? context.appColors.positive
-                            : amount < 0
-                                ? context.appColors.negative
-                                : Theme.of(context).colorScheme.onSurface,
-                      ),
-                    ),
-                    children: [
-                      ...list.map((t) {
-                        final isIncome = t.type == TransactionType.income;
-                        final title =
-                            t.label.trim().isNotEmpty ? t.label : catName;
-
-                        return Dismissible(
-                          key: ValueKey(t.id),
-                          direction: DismissDirection.endToStart,
-                          background: Container(
-                            alignment: Alignment.centerRight,
-                            padding: const EdgeInsets.symmetric(horizontal: 24),
-                            color: context.appColors.negative,
-                            child: const Icon(Icons.delete, color: Colors.white),
-                          ),
-                          confirmDismiss: (_) => _confirmDeleteTransaction(t),
-                          onDismissed: (_) => _deleteTransaction(t),
-                          child: ListTile(
-                            onTap: () => _editTransaction(t),
-                            onLongPress: isPointable
-                                ? () => _toggleCleared(t)
-                                : null,
-                            contentPadding:
-                                const EdgeInsets.symmetric(horizontal: 48),
-                            leading: Icon(
-                              isIncome ? Icons.add : Icons.remove,
-                              color: isIncome
-                                  ? context.appColors.positive
-                                  : context.appColors.negative,
-                            ),
-                            title: Row(
-                              children: [
-                                Flexible(child: Text(title)),
-                                if (t.splitGroupId != null) ...[
-                                  const SizedBox(width: 6),
-                                  const Icon(Icons.call_split, size: 14),
-                                ],
-                              ],
-                            ),
-                            subtitle: Text(
-                              '${t.date.day.toString().padLeft(2, '0')}/'
-                              '${t.date.month.toString().padLeft(2, '0')}/'
-                              '${t.date.year}',
-                            ),
-                            trailing: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                if (isPointable) ...[
-                                  Icon(
-                                    t.isCleared
-                                        ? Icons.check_circle
-                                        : Icons.schedule,
-                                    size: 18,
-                                    color: t.isCleared
-                                        ? context.appColors.positive
-                                        : Theme.of(context)
-                                            .colorScheme
-                                            .onSurfaceVariant,
-                                  ),
-                                  const SizedBox(width: 6),
-                                ],
-                                Text(
-                                  '${isIncome ? '+' : '-'}${t.amount.toStringAsFixed(2)} €',
-                                  style: TextStyle(
-                                    fontWeight: FontWeight.bold,
-                                    color: t.isCarryOver
-                                        ? Theme.of(context)
-                                            .colorScheme
-                                            .onSurfaceVariant
-                                        : (isIncome
-                                            ? context.appColors.positive
-                                            : context.appColors.negative),
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        );
-                      }),
-                    ],
-                  );
-                }),
-              ],
+              title: Text(container.name),
+              trailing: const Text('0.00 €'),
             );
-          }),
-          const Divider(height: 1),
-          const SizedBox(height: 12),
-        ],
-      ),
+          }
+
+          final Map<String?, List<Transaction>> byCat = {};
+          for (final t in containerTx) {
+            byCat.putIfAbsent(t.category, () => []).add(t);
+          }
+
+          return ExpansionTile(
+            tilePadding: const EdgeInsets.symmetric(horizontal: 16),
+            leading: CircleAvatar(radius: 6, backgroundColor: container.color),
+
+            // 🔹 BOUTONS CONTENEUR
+            title: Row(
+              children: [
+                Expanded(child: Text(container.name)),
+                if (container.type == ContainerType.savingsAccount)
+                  IconButton(
+                    icon: const Icon(Icons.trending_up),
+                    onPressed: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) =>
+                              ContainerInterestsScreen(container: container),
+                        ),
+                      );
+                    },
+                  ),
+              ],
+            ),
+
+            trailing: Text(
+              '${total.toStringAsFixed(2)} €',
+              style: TextStyle(
+                fontWeight: FontWeight.bold,
+                color: total > 0
+                    ? context.appColors.positive
+                    : total < 0
+                        ? context.appColors.negative
+                        : Theme.of(context).colorScheme.onSurface,
+              ),
+            ),
+            children: [
+              ...byCat.entries.map((entry) {
+                final catId = entry.key;
+                final list = entry.value;
+
+                final catName = catId == null
+                    ? 'Sans catégorie'
+                    : (CategoriesStore.getById(catId)?.name ??
+                        'Catégorie supprimée');
+
+                final amount = list.where((t) => !t.isCarryOver).fold<double>(
+                      0,
+                      (s, t) => t.type == TransactionType.income
+                          ? s + t.amount
+                          : s - t.amount,
+                    );
+
+                return ExpansionTile(
+                  tilePadding: const EdgeInsets.symmetric(horizontal: 32),
+                  title: Text(catName),
+                  trailing: Text(
+                    '${amount.toStringAsFixed(2)} €',
+                    style: TextStyle(
+                      fontWeight: FontWeight.w600,
+                      color: amount > 0
+                          ? context.appColors.positive
+                          : amount < 0
+                              ? context.appColors.negative
+                              : Theme.of(context).colorScheme.onSurface,
+                    ),
+                  ),
+                  children: [
+                    ...list.map((t) {
+                      final isIncome = t.type == TransactionType.income;
+                      final title =
+                          t.label.trim().isNotEmpty ? t.label : catName;
+
+                      return Dismissible(
+                        key: ValueKey(t.id),
+                        direction: DismissDirection.endToStart,
+                        background: Container(
+                          alignment: Alignment.centerRight,
+                          padding: const EdgeInsets.symmetric(horizontal: 24),
+                          color: context.appColors.negative,
+                          child: const Icon(Icons.delete, color: Colors.white),
+                        ),
+                        confirmDismiss: (_) => _confirmDeleteTransaction(t),
+                        onDismissed: (_) => _deleteTransaction(t),
+                        child: ListTile(
+                          onTap: () => _editTransaction(t),
+                          onLongPress:
+                              isPointable ? () => _toggleCleared(t) : null,
+                          contentPadding:
+                              const EdgeInsets.symmetric(horizontal: 48),
+                          leading: Icon(
+                            isIncome ? Icons.add : Icons.remove,
+                            color: isIncome
+                                ? context.appColors.positive
+                                : context.appColors.negative,
+                          ),
+                          title: Row(
+                            children: [
+                              Flexible(child: Text(title)),
+                              if (t.splitGroupId != null) ...[
+                                const SizedBox(width: 6),
+                                const Icon(Icons.call_split, size: 14),
+                              ],
+                            ],
+                          ),
+                          subtitle: Text(
+                            '${t.date.day.toString().padLeft(2, '0')}/'
+                            '${t.date.month.toString().padLeft(2, '0')}/'
+                            '${t.date.year}',
+                          ),
+                          trailing: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              if (isPointable) ...[
+                                Icon(
+                                  t.isCleared
+                                      ? Icons.check_circle
+                                      : Icons.schedule,
+                                  size: 18,
+                                  color: t.isCleared
+                                      ? context.appColors.positive
+                                      : Theme.of(context)
+                                          .colorScheme
+                                          .onSurfaceVariant,
+                                ),
+                                const SizedBox(width: 6),
+                              ],
+                              Text(
+                                '${isIncome ? '+' : '-'}${t.amount.toStringAsFixed(2)} €',
+                                style: TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                  color: t.isCarryOver
+                                      ? Theme.of(context)
+                                          .colorScheme
+                                          .onSurfaceVariant
+                                      : (isIncome
+                                          ? context.appColors.positive
+                                          : context.appColors.negative),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      );
+                    }),
+                  ],
+                );
+              }),
+            ],
+          );
+        }),
+        const Divider(height: 1),
+        const SizedBox(height: 12),
+      ],
     );
   }
 }
@@ -1028,8 +1450,23 @@ class _DedicatedContainerTile extends StatelessWidget {
       final count =
           container.cryptoHoldings.length + container.stockHoldings.length;
       return Text(
-        count == 0 ? 'Aucune position' : '$count position${count > 1 ? 's' : ''}',
+        count == 0
+            ? 'Aucune position'
+            : '$count position${count > 1 ? 's' : ''}',
         style: TextStyle(color: neutral),
+      );
+    }
+
+    if (container.type == ContainerType.credit) {
+      final remaining = container.creditRemainingBalance;
+      return Text(
+        remaining == null
+            ? 'Non configuré'
+            : '-${remaining.toStringAsFixed(2)} €',
+        style: TextStyle(
+          fontWeight: FontWeight.bold,
+          color: remaining == null ? neutral : context.appColors.negative,
+        ),
       );
     }
 
@@ -1077,6 +1514,7 @@ class _DedicatedContainerTile extends StatelessWidget {
             ContainerRetirementScreen(container: container),
           ContainerType.investmentAccount =>
             ContainerInvestmentScreen(container: container),
+          ContainerType.credit => ContainerCreditScreen(container: container),
           _ => throw StateError('Type non pris en charge'),
         };
         Navigator.push(context, MaterialPageRoute(builder: (_) => screen));

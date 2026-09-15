@@ -27,6 +27,12 @@ class Transaction {
   /// - non-null => transaction créée un mois précédent, visible ce mois-ci
   final String? originMonthKey;
 
+  /// Membre du compte partagé qui a réellement payé cette dépense —
+  /// sert au calcul du solde entre membres (voir
+  /// [EquitySettlementService]). `null` = non renseigné (compte solo,
+  /// ou transaction créée avant l'ajout de cette fonctionnalité).
+  final String? paidByUserId;
+
   Transaction({
     required this.id,
     required this.label,
@@ -43,6 +49,7 @@ class Transaction {
     this.isCarryOver = false,
     required this.monthKey,
     this.originMonthKey, // ✅
+    this.paidByUserId,
   });
 
   Transaction copyWith({
@@ -60,6 +67,7 @@ class Transaction {
     bool? isCarryOver,
     String? monthKey,
     String? originMonthKey, // ✅
+    String? paidByUserId,
   }) {
     return Transaction(
       id: id,
@@ -77,6 +85,7 @@ class Transaction {
       isCarryOver: isCarryOver ?? this.isCarryOver,
       monthKey: monthKey ?? this.monthKey,
       originMonthKey: originMonthKey ?? this.originMonthKey, // ✅
+      paidByUserId: paidByUserId ?? this.paidByUserId,
     );
   }
 
@@ -99,6 +108,7 @@ class Transaction {
       'is_carry_over': isCarryOver,
       'month_key': monthKey,
       'origin_month_key': originMonthKey,
+      'paid_by_user_id': paidByUserId,
     };
   }
 
@@ -119,6 +129,7 @@ class Transaction {
       isCarryOver: (map['is_carry_over'] as bool?) ?? false,
       monthKey: map['month_key'] as String,
       originMonthKey: map['origin_month_key'] as String?,
+      paidByUserId: map['paid_by_user_id'] as String?,
     );
   }
 }

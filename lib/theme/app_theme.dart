@@ -6,20 +6,21 @@ import 'app_colors.dart';
 /// couleur de départ et des mêmes styles de composants — c'est ce qui
 /// garantit la cohérence visuelle plutôt que deux thèmes divergents.
 class AppTheme {
-  static const _seedColor = Colors.blue;
+  static const defaultSeedColor = Colors.blue;
 
-  static ThemeData light() => _build(Brightness.light);
-  static ThemeData dark() => _build(Brightness.dark);
+  static ThemeData light({Color? seedColor}) =>
+      _build(Brightness.light, seedColor);
+  static ThemeData dark({Color? seedColor}) =>
+      _build(Brightness.dark, seedColor);
 
-  static ThemeData _build(Brightness brightness) {
+  static ThemeData _build(Brightness brightness, Color? seedColor) {
     final colorScheme = ColorScheme.fromSeed(
-      seedColor: _seedColor,
+      seedColor: seedColor ?? defaultSeedColor,
       brightness: brightness,
     );
 
-    final appColors = brightness == Brightness.dark
-        ? AppColors.dark
-        : AppColors.light;
+    final appColors =
+        brightness == Brightness.dark ? AppColors.dark : AppColors.light;
 
     return ThemeData(
       useMaterial3: true,
@@ -27,7 +28,6 @@ class AppTheme {
       colorScheme: colorScheme,
       scaffoldBackgroundColor: colorScheme.surface,
       extensions: [appColors],
-
       appBarTheme: AppBarTheme(
         backgroundColor: colorScheme.surface,
         foregroundColor: colorScheme.onSurface,
@@ -35,7 +35,6 @@ class AppTheme {
         scrolledUnderElevation: 1,
         centerTitle: false,
       ),
-
       cardTheme: CardThemeData(
         elevation: 0,
         color: colorScheme.surfaceContainerHigh,
@@ -44,19 +43,16 @@ class AppTheme {
           borderRadius: BorderRadius.circular(12),
         ),
       ),
-
       listTileTheme: ListTileThemeData(
         iconColor: colorScheme.onSurfaceVariant,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(10),
         ),
       ),
-
       dividerTheme: DividerThemeData(
         color: colorScheme.outlineVariant,
         space: 1,
       ),
-
       inputDecorationTheme: InputDecorationTheme(
         filled: true,
         fillColor: colorScheme.surfaceContainerHighest.withValues(alpha: 0.4),
@@ -67,7 +63,6 @@ class AppTheme {
         contentPadding:
             const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       ),
-
       elevatedButtonTheme: ElevatedButtonThemeData(
         style: ElevatedButton.styleFrom(
           padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 20),
@@ -76,7 +71,6 @@ class AppTheme {
           ),
         ),
       ),
-
       outlinedButtonTheme: OutlinedButtonThemeData(
         style: OutlinedButton.styleFrom(
           padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
@@ -85,7 +79,6 @@ class AppTheme {
           ),
         ),
       ),
-
       chipTheme: ChipThemeData(
         backgroundColor: colorScheme.surfaceContainerHighest,
         selectedColor: colorScheme.primaryContainer,
@@ -95,24 +88,20 @@ class AppTheme {
           borderRadius: BorderRadius.circular(999),
         ),
       ),
-
       progressIndicatorTheme: ProgressIndicatorThemeData(
         color: colorScheme.primary,
       ),
-
       dialogTheme: DialogThemeData(
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(16),
         ),
       ),
-
       bottomSheetTheme: BottomSheetThemeData(
         backgroundColor: colorScheme.surface,
         shape: const RoundedRectangleBorder(
           borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
         ),
       ),
-
       snackBarTheme: SnackBarThemeData(
         behavior: SnackBarBehavior.floating,
         shape: RoundedRectangleBorder(

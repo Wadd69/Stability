@@ -20,7 +20,8 @@ class WelcomeScreen extends StatelessWidget {
               padding: const EdgeInsets.all(24),
               child: ConstrainedBox(
                 constraints: BoxConstraints(
-                  minHeight: constraints.maxHeight - 48, // 24 de padding haut/bas
+                  minHeight:
+                      constraints.maxHeight - 48, // 24 de padding haut/bas
                 ),
                 child: IntrinsicHeight(
                   child: Column(
@@ -36,14 +37,16 @@ class WelcomeScreen extends StatelessWidget {
                       const Text(
                         'Bienvenue dans Stability',
                         textAlign: TextAlign.center,
-                        style: TextStyle(fontSize: 26, fontWeight: FontWeight.bold),
+                        style: TextStyle(
+                            fontSize: 26, fontWeight: FontWeight.bold),
                       ),
                       const SizedBox(height: 12),
                       Text(
                         'Merci de nous faire confiance pour vous accompagner dans '
                         'la gestion de votre argent.',
                         textAlign: TextAlign.center,
-                        style: TextStyle(fontSize: 15, color: colorScheme.onSurfaceVariant),
+                        style: TextStyle(
+                            fontSize: 15, color: colorScheme.onSurfaceVariant),
                       ),
                       const SizedBox(height: 32),
                       Text(
@@ -60,6 +63,37 @@ class WelcomeScreen extends StatelessWidget {
                         'proches, avec une mise à jour en temps réel entre tous '
                         'les appareils.',
                         style: const TextStyle(fontSize: 15, height: 1.4),
+                      ),
+                      const SizedBox(height: 24),
+                      Container(
+                        padding: const EdgeInsets.all(16),
+                        decoration: BoxDecoration(
+                          color: colorScheme.primaryContainer
+                              .withValues(alpha: 0.4),
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Icon(Icons.mail_outline,
+                                color: colorScheme.primary),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Text(
+                                'Vous êtes bêta-testeur : je vous enverrai des '
+                                'mails pendant cette phase (confirmation de '
+                                'compte, infos, sondages). Pensez à vérifier vos '
+                                'spams — ces retours sont indispensables pour '
+                                'faire avancer l\'app.',
+                                style: TextStyle(
+                                  fontSize: 13,
+                                  height: 1.4,
+                                  color: colorScheme.onSurface,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
                       ),
                       const Spacer(),
                       const Spacer(),

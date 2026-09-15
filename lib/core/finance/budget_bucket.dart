@@ -1,28 +1,39 @@
-/// Classement d'une catégorie pour la méthode 50/30/20 :
-/// 50% besoins essentiels, 30% envies/loisirs, 20% épargne/dettes.
-/// Non utilisé en mode "budget base zéro" ou "suivi libre".
-enum BudgetBucket { needs, wants, savings }
+/// Enveloppe personnalisable pour la méthode "pourcentages personnalisés"
+/// (généralisation de la règle 50/30/20 : au lieu de 3 enveloppes figées,
+/// le compte définit N enveloppes avec un nom et un pourcentage au choix).
+/// Stockée sur le compte cloud (voir CloudAccount.customBuckets).
+class CustomBucket {
+  final String id;
+  final String name;
 
-extension BudgetBucketLabel on BudgetBucket {
-  String get label {
-    switch (this) {
-      case BudgetBucket.needs:
-        return 'Besoins (50%)';
-      case BudgetBucket.wants:
-        return 'Envies (30%)';
-      case BudgetBucket.savings:
-        return 'Épargne / dettes (20%)';
-    }
-  }
+  /// Part du revenu prévisionnel visée par cette enveloppe (0.0 à 1.0).
+  final double targetShare;
 
-  double get targetShare {
-    switch (this) {
-      case BudgetBucket.needs:
-        return 0.5;
-      case BudgetBucket.wants:
-        return 0.3;
-      case BudgetBucket.savings:
-        return 0.2;
-    }
-  }
+  const CustomBucket({
+    required this.id,
+    required this.name,
+    required this.targetShare,
+  });
+
+  Map<String, dynamic> toMap() => {
+        'id': id,
+        'name': name,
+        'target_share': targetShare,
+      };
+
+  factory CustomBucket.fromMap(Map<dynamic, dynamic> map) => CustomBucket(
+        id: map['id'] as String,
+        name: map['name'] as String,
+        targetShare: (map['target_share'] as num).toDouble(),
+      );
 }
+
+/// Enveloppes par défaut d'un compte fraîchement créé en mode "Règle
+/// 50/30/20" — mêmes noms/pourcentages que l'ancienne version figée, pour
+/// que l'expérience par défaut ne change pas. Modifiables ensuite depuis
+/// l'écran de la méthode.
+const List<CustomBucket> kDefaultBuckets = [
+  CustomBucket(id: 'needs', name: 'Besoins', targetShare: 0.5),
+  CustomBucket(id: 'wants', name: 'Envies', targetShare: 0.3),
+  CustomBucket(id: 'savings', name: 'Épargne / dettes', targetShare: 0.2),
+];

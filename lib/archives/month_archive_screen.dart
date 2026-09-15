@@ -1,7 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 
 import '../core/archives/archived_month.dart';
+import '../core/containers/containers_store.dart';
 import '../core/finance/categories_store.dart';
+import '../core/finance/transaction_analysis.dart';
 import 'package:stability/core/finance/finance.dart';
 import '../theme/app_colors.dart';
 import '../help/help_screen.dart';
@@ -35,7 +38,10 @@ class _MonthArchiveScreenState extends State<MonthArchiveScreen> {
   // ─────────────────────────
   @override
   Widget build(BuildContext context) {
-    final tx = TransactionsStore.archivedForMonth(widget.month.id);
+    final tx = TransactionAnalysis.filterForAnalysis(
+      TransactionsStore.archivedForMonth(widget.month.id),
+      context.read<ContainersStore>(),
+    );
 
     return Scaffold(
       appBar: AppBar(
@@ -128,7 +134,9 @@ class _MonthArchiveScreenState extends State<MonthArchiveScreen> {
       trailing: Text(
         '${isIncome ? '+' : '-'}${t.amount.toStringAsFixed(2)}€',
         style: TextStyle(
-          color: isIncome ? context.appColors.positive : context.appColors.negative,
+          color: isIncome
+              ? context.appColors.positive
+              : context.appColors.negative,
           fontWeight: FontWeight.bold,
         ),
       ),

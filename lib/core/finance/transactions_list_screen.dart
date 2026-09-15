@@ -15,8 +15,7 @@ class TransactionsListScreen extends StatefulWidget {
   const TransactionsListScreen({super.key});
 
   @override
-  State<TransactionsListScreen> createState() =>
-      _TransactionsListScreenState();
+  State<TransactionsListScreen> createState() => _TransactionsListScreenState();
 }
 
 class _TransactionsListScreenState extends State<TransactionsListScreen> {
@@ -100,9 +99,9 @@ class _TransactionsListScreenState extends State<TransactionsListScreen> {
                   style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
                 ),
                 const SizedBox(height: 16),
-
                 DropdownButtonFormField<TransactionType?>(
                   initialValue: typeFilter,
+                  isExpanded: true,
                   decoration: const InputDecoration(labelText: 'Type'),
                   items: const [
                     DropdownMenuItem(value: null, child: Text('Tous')),
@@ -122,36 +121,38 @@ class _TransactionsListScreenState extends State<TransactionsListScreen> {
                   onChanged: (v) => setModalState(() => typeFilter = v),
                 ),
                 const SizedBox(height: 12),
-
                 DropdownButtonFormField<String?>(
                   initialValue: containerFilter,
+                  isExpanded: true,
                   decoration: const InputDecoration(labelText: 'Support'),
                   items: [
                     const DropdownMenuItem(value: null, child: Text('Tous')),
                     ...containers.map(
-                      (c) =>
-                          DropdownMenuItem(value: c.id, child: Text(c.name)),
+                      (c) => DropdownMenuItem(
+                        value: c.id,
+                        child: Text(c.name, overflow: TextOverflow.ellipsis),
+                      ),
                     ),
                   ],
                   onChanged: (v) => setModalState(() => containerFilter = v),
                 ),
                 const SizedBox(height: 12),
-
                 DropdownButtonFormField<String?>(
                   initialValue: categoryFilter,
+                  isExpanded: true,
                   decoration: const InputDecoration(labelText: 'Catégorie'),
                   items: [
-                    const DropdownMenuItem(
-                        value: null, child: Text('Toutes')),
+                    const DropdownMenuItem(value: null, child: Text('Toutes')),
                     ...categories.map(
-                      (c) =>
-                          DropdownMenuItem(value: c.id, child: Text(c.name)),
+                      (c) => DropdownMenuItem(
+                        value: c.id,
+                        child: Text(c.name, overflow: TextOverflow.ellipsis),
+                      ),
                     ),
                   ],
                   onChanged: (v) => setModalState(() => categoryFilter = v),
                 ),
                 const SizedBox(height: 12),
-
                 ListTile(
                   contentPadding: EdgeInsets.zero,
                   title: const Text('Période'),
@@ -185,7 +186,6 @@ class _TransactionsListScreenState extends State<TransactionsListScreen> {
                   },
                 ),
                 const SizedBox(height: 24),
-
                 Row(
                   children: [
                     Expanded(
@@ -280,14 +280,17 @@ class _TransactionsListScreenState extends State<TransactionsListScreen> {
         title: const Text('Transactions'),
         actions: [
           IconButton(
-            icon: Icon(_sortDescending ? Icons.arrow_downward : Icons.arrow_upward),
+            icon: Icon(
+                _sortDescending ? Icons.arrow_downward : Icons.arrow_upward),
             tooltip: 'Trier par date',
             onPressed: () => setState(() => _sortDescending = !_sortDescending),
           ),
           IconButton(
             icon: Icon(
               Icons.filter_list,
-              color: _hasActiveFilters ? Theme.of(context).colorScheme.primary : null,
+              color: _hasActiveFilters
+                  ? Theme.of(context).colorScheme.primary
+                  : null,
             ),
             onPressed: _openFilters,
           ),

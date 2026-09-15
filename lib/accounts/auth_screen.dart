@@ -18,6 +18,7 @@ class _AuthScreenState extends State<AuthScreen> {
 
   bool _isSignUp = false;
   bool _loading = false;
+  bool _obscurePassword = true;
   String? _error;
   String? _info;
 
@@ -47,8 +48,10 @@ class _AuthScreenState extends State<AuthScreen> {
         if (!AuthRepository.isAuthenticated) {
           // Confirmation email activée sur le projet Supabase.
           setState(() {
-            _info = 'Compte créé. Vérifiez votre boîte mail pour confirmer '
-                'votre adresse avant de vous connecter.';
+            _info = 'Compte créé. Vérifiez votre boîte mail (et vos spams) '
+                'pour confirmer votre adresse avant de vous connecter. '
+                'D\'autres mails suivront pendant la bêta — ils sont '
+                'importants pour la suite de l\'app.';
             _loading = false;
           });
           return;
@@ -96,7 +99,6 @@ class _AuthScreenState extends State<AuthScreen> {
                     textAlign: TextAlign.center,
                   ),
                   const SizedBox(height: 32),
-
                   TextFormField(
                     controller: _emailController,
                     keyboardType: TextInputType.emailAddress,
@@ -108,19 +110,31 @@ class _AuthScreenState extends State<AuthScreen> {
                   const SizedBox(height: 16),
                   TextFormField(
                     controller: _passwordController,
-                    obscureText: true,
-                    decoration:
-                        const InputDecoration(labelText: 'Mot de passe'),
+                    obscureText: _obscurePassword,
+                    decoration: InputDecoration(
+                      labelText: 'Mot de passe',
+                      suffixIcon: IconButton(
+                        tooltip: _obscurePassword ? 'Afficher' : 'Masquer',
+                        icon: Icon(
+                          _obscurePassword
+                              ? Icons.visibility_outlined
+                              : Icons.visibility_off_outlined,
+                        ),
+                        onPressed: () => setState(
+                          () => _obscurePassword = !_obscurePassword,
+                        ),
+                      ),
+                    ),
                     validator: (v) => (v == null || v.length < 6)
                         ? '6 caractères minimum'
                         : null,
                   ),
                   const SizedBox(height: 24),
-
                   if (_error != null) ...[
                     Text(
                       _error!,
-                      style: TextStyle(color: Theme.of(context).colorScheme.error),
+                      style:
+                          TextStyle(color: Theme.of(context).colorScheme.error),
                     ),
                     const SizedBox(height: 16),
                   ],
@@ -128,7 +142,6 @@ class _AuthScreenState extends State<AuthScreen> {
                     Text(_info!),
                     const SizedBox(height: 16),
                   ],
-
                   ElevatedButton(
                     onPressed: _loading ? null : _submit,
                     child: _loading

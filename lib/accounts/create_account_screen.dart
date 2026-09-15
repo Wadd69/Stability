@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../backend/auth_repository.dart';
 import '../backend/cloud_account.dart';
@@ -44,6 +45,37 @@ class _CreateAccountScreenState extends State<CreateAccountScreen> {
     super.dispose();
   }
 
+  Future<void> _performSave() async {
+    if (widget.existing == null) {
+      final account = await CloudAccountsRepository.createAccount(
+        name: _nameController.text.trim(),
+        isShared: _isShared,
+        mode: _mode,
+      );
+      CurrentAccount.active = account;
+    } else {
+      final updated = CloudAccount(
+        id: widget.existing!.id,
+        name: _nameController.text.trim(),
+        isShared: _isShared,
+        managementMode: _mode,
+        ownerId: widget.existing!.ownerId,
+      );
+      await CloudAccountsRepository.updateAccount(updated);
+      if (CurrentAccount.active.id == updated.id) {
+        CurrentAccount.active = updated;
+      }
+    }
+
+    if (!mounted) return;
+
+    if (widget.onCreated != null) {
+      widget.onCreated!();
+    } else {
+      Navigator.pop(context);
+    }
+  }
+
   Future<void> _save() async {
     if (!_formKey.currentState!.validate()) return;
 
@@ -53,40 +85,34 @@ class _CreateAccountScreenState extends State<CreateAccountScreen> {
     });
 
     try {
-      if (widget.existing == null) {
-        final account = await CloudAccountsRepository.createAccount(
-          name: _nameController.text.trim(),
-          isShared: _isShared,
-          mode: _mode,
-        );
-        CurrentAccount.active = account;
-      } else {
-        final updated = CloudAccount(
-          id: widget.existing!.id,
-          name: _nameController.text.trim(),
-          isShared: _isShared,
-          managementMode: _mode,
-          ownerId: widget.existing!.ownerId,
-        );
-        await CloudAccountsRepository.updateAccount(updated);
-        if (CurrentAccount.active.id == updated.id) {
-          CurrentAccount.active = updated;
-        }
+      await _performSave();
+    } catch (e) {
+      // Diagnostic brut du tout premier échec, sans nouvelle tentative
+      // intermédiaire (un rafraîchissement de session avant de réessayer
+      // brouillait le diagnostic : il montrait l'état après coup, pas
+      // celui qui a provoqué l'échec initial).
+      String debugInfo = '';
+      if (e.toString().contains('row-level security')) {
+        final auth = Supabase.instance.client.auth;
+        final session = auth.currentSession;
+        final nowUtc = DateTime.now().toUtc();
+        final expiresAt = session?.expiresAt == null
+            ? null
+            : DateTime.fromMillisecondsSinceEpoch(
+                session!.expiresAt! * 1000,
+                isUtc: true,
+              );
+        final token = session?.accessToken;
+        debugInfo = '\n[diag] uid=${auth.currentUser?.id} '
+            'session=${session != null} '
+            'expiresAt=$expiresAt now=$nowUtc '
+            'expired=${expiresAt != null && expiresAt.isBefore(nowUtc)} '
+            'tokenLen=${token?.length} tokenParts=${token?.split('.').length}';
       }
 
       if (!mounted) return;
-
-      if (widget.onCreated != null) {
-        widget.onCreated!();
-      } else {
-        Navigator.pop(context);
-      }
-    } catch (e) {
       setState(() {
-        _error = e.toString().contains('row-level security')
-            ? 'Session invalide. Déconnectez-vous puis reconnectez-vous '
-                '(bouton ci-dessous).'
-            : 'Erreur : ${e.toString()}';
+        _error = 'Erreur : ${e.toString()}$debugInfo';
         _saving = false;
       });
     }
@@ -150,7 +176,8 @@ class _CreateAccountScreenState extends State<CreateAccountScreen> {
                         ],
                       ),
                       const SizedBox(height: 4),
-                      Text(m.longDescription, style: const TextStyle(height: 1.4)),
+                      Text(m.longDescription,
+                          style: const TextStyle(height: 1.4)),
                     ],
                   ),
                 ),
@@ -201,7 +228,6 @@ class _CreateAccountScreenState extends State<CreateAccountScreen> {
                     ),
                     const SizedBox(height: 32),
                   ],
-
                   TextFormField(
                     controller: _nameController,
                     autofocus: true,
@@ -209,12 +235,10 @@ class _CreateAccountScreenState extends State<CreateAccountScreen> {
                       labelText: 'Nom du compte',
                       hintText: 'ex: Compte personnel',
                     ),
-                    validator: (v) => (v == null || v.trim().isEmpty)
-                        ? 'Champ requis'
-                        : null,
+                    validator: (v) =>
+                        (v == null || v.trim().isEmpty) ? 'Champ requis' : null,
                   ),
                   const SizedBox(height: 16),
-
                   SwitchListTile(
                     contentPadding: EdgeInsets.zero,
                     title: const Text('Compte partagé'),
@@ -223,9 +247,9 @@ class _CreateAccountScreenState extends State<CreateAccountScreen> {
                     onChanged: (v) => setState(() => _isShared = v),
                   ),
                   const SizedBox(height: 16),
-
                   DropdownButtonFormField<ManagementMode>(
                     initialValue: _mode,
+                    isExpanded: true,
                     decoration: InputDecoration(
                       labelText: 'Méthode de gestion',
                       suffixIcon: IconButton(
@@ -238,7 +262,10 @@ class _CreateAccountScreenState extends State<CreateAccountScreen> {
                         .map(
                           (m) => DropdownMenuItem(
                             value: m,
-                            child: Text(m.label),
+                            child: Text(
+                              m.label,
+                              overflow: TextOverflow.ellipsis,
+                            ),
                           ),
                         )
                         .toList(),
@@ -252,17 +279,15 @@ class _CreateAccountScreenState extends State<CreateAccountScreen> {
                       color: Theme.of(context).colorScheme.onSurfaceVariant,
                     ),
                   ),
-
                   if (_error != null) ...[
                     const SizedBox(height: 16),
-                    Text(
+                    SelectableText(
                       _error!,
-                      style: TextStyle(color: Theme.of(context).colorScheme.error),
+                      style:
+                          TextStyle(color: Theme.of(context).colorScheme.error),
                     ),
                   ],
-
                   const SizedBox(height: 32),
-
                   ElevatedButton(
                     onPressed: _saving ? null : _save,
                     child: _saving
@@ -271,9 +296,9 @@ class _CreateAccountScreenState extends State<CreateAccountScreen> {
                             height: 20,
                             child: CircularProgressIndicator(strokeWidth: 2),
                           )
-                        : Text(isEditing ? 'Enregistrer' : 'Créer et continuer'),
+                        : Text(
+                            isEditing ? 'Enregistrer' : 'Créer et continuer'),
                   ),
-
                   if (widget.onCreated != null) ...[
                     const SizedBox(height: 12),
                     TextButton(

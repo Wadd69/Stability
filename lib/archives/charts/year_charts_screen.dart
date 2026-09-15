@@ -1,9 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:fl_chart/fl_chart.dart';
+import 'package:provider/provider.dart';
 import 'package:stability/core/finance/transaction_type.dart';
 
 import '../../core/archives/archived_month.dart';
+import '../../core/containers/containers_store.dart';
 import '../../core/finance/transaction.dart';
+import '../../core/finance/transaction_analysis.dart';
 import '../../core/finance/transactions_store.dart';
 import '../../core/finance/categories_store.dart';
 import '../../theme/app_colors.dart';
@@ -58,16 +61,19 @@ class _YearChartsScreenState extends State<YearChartsScreen> {
 
   // ─────────────────────────
   List<Transaction> get _allTransactions {
-    return widget.months
+    final all = widget.months
         .expand<Transaction>(
           (ArchivedMonth m) => TransactionsStore.archivedForMonth(m.id),
         )
         .toList();
+    return TransactionAnalysis.filterForAnalysis(
+      all,
+      context.read<ContainersStore>(),
+    );
   }
 
   bool _allowed(String? id) =>
-      selectedCategories.contains('__ALL__') ||
-      selectedCategories.contains(id);
+      selectedCategories.contains('__ALL__') || selectedCategories.contains(id);
 
   @override
   void initState() {
@@ -152,7 +158,8 @@ class _YearChartsScreenState extends State<YearChartsScreen> {
             ),
             const SizedBox(height: 12),
             CategoryPieChart(
-              transactions: _allTransactions.where((t) => _allowed(t.category)).toList(),
+              transactions:
+                  _allTransactions.where((t) => _allowed(t.category)).toList(),
               mode: pieMode,
               asPercentage: asPercentage,
               currencySymbol: _currencySymbol,
@@ -209,15 +216,23 @@ class _YearChartsScreenState extends State<YearChartsScreen> {
       perCategory.putIfAbsent(c.id, () => List<double>.filled(12, 0));
     }
 
+    final containersStore = context.read<ContainersStore>();
+
     for (int i = 0; i < widget.months.length; i++) {
       final m = widget.months[i];
       final mi = _monthIndex(m, i);
+      final monthTx = TransactionsStore.archivedForMonth(m.id);
 
-      for (final t in TransactionsStore.archivedForMonth(m.id)) {
+      for (final t in monthTx) {
+        final countsAsExpense =
+            TransactionAnalysis.countsAsExpense(t, monthTx, containersStore);
+        final countsAsIncome = TransactionAnalysis.countsAsIncome(t);
+        if (!countsAsExpense && !countsAsIncome) continue;
+
         perCategory.putIfAbsent(t.category, () => List<double>.filled(12, 0));
         perCategory[t.category]![mi] += t.amount;
 
-        if (t.type == TransactionType.expense) {
+        if (countsAsExpense) {
           totalsExpenses[mi] += t.amount;
         } else {
           totalsIncome[mi] += t.amount;
@@ -316,10 +331,10 @@ class _YearChartsScreenState extends State<YearChartsScreen> {
                   ),
                 ),
                 titlesData: FlTitlesData(
-                  topTitles:
-                      const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-                  rightTitles:
-                      const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+                  topTitles: const AxisTitles(
+                      sideTitles: SideTitles(showTitles: false)),
+                  rightTitles: const AxisTitles(
+                      sideTitles: SideTitles(showTitles: false)),
                   leftTitles: AxisTitles(
                     sideTitles: SideTitles(
                       showTitles: true,
@@ -341,7 +356,18 @@ class _YearChartsScreenState extends State<YearChartsScreen> {
                       interval: 1,
                       getTitlesWidget: (v, meta) {
                         const labels = [
-                          'J','F','M','A','M','J','J','A','S','O','N','D'
+                          'J',
+                          'F',
+                          'M',
+                          'A',
+                          'M',
+                          'J',
+                          'J',
+                          'A',
+                          'S',
+                          'O',
+                          'N',
+                          'D'
                         ];
                         final i = v.toInt();
                         if (i < 0 || i > 11) return const SizedBox.shrink();
@@ -383,7 +409,8 @@ class _YearChartsScreenState extends State<YearChartsScreen> {
         const Spacer(),
         TextButton.icon(
           onPressed: () => setState(() => showLineFilters = !showLineFilters),
-          icon: Icon(showLineFilters ? Icons.expand_less : Icons.tune, size: 18),
+          icon:
+              Icon(showLineFilters ? Icons.expand_less : Icons.tune, size: 18),
           label: Text(showLineFilters ? 'Masquer filtres' : 'Filtres'),
         ),
       ],
@@ -405,7 +432,8 @@ class _YearChartsScreenState extends State<YearChartsScreen> {
               label: 'Total Dépenses',
               selected: showTotalExpenses,
               colorDot: Colors.grey.shade800,
-              onTap: () => setState(() => showTotalExpenses = !showTotalExpenses),
+              onTap: () =>
+                  setState(() => showTotalExpenses = !showTotalExpenses),
             ),
             _proTogglePill(
               label: 'Total Revenus',
@@ -556,7 +584,9 @@ class _YearChartsScreenState extends State<YearChartsScreen> {
       trailing: Text(
         '${isIncome ? '+' : '-'}${t.amount.toStringAsFixed(2)}$_currencySymbol',
         style: TextStyle(
-          color: isIncome ? context.appColors.positive : context.appColors.negative,
+          color: isIncome
+              ? context.appColors.positive
+              : context.appColors.negative,
           fontWeight: FontWeight.bold,
         ),
       ),
@@ -577,8 +607,7 @@ class _YearChartsScreenState extends State<YearChartsScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(title,
-                  style: const TextStyle(fontWeight: FontWeight.bold)),
+              Text(title, style: const TextStyle(fontWeight: FontWeight.bold)),
               const SizedBox(height: 12),
               Expanded(child: child),
             ],

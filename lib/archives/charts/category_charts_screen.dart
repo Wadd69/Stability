@@ -215,8 +215,7 @@ class _CategoryChartsScreenState extends State<CategoryChartsScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(title,
-                  style: const TextStyle(fontWeight: FontWeight.bold)),
+              Text(title, style: const TextStyle(fontWeight: FontWeight.bold)),
               const SizedBox(height: 12),
               Expanded(child: child),
             ],

@@ -45,9 +45,7 @@ class InterestAdjustmentsStore {
   ) {
     try {
       return _items.firstWhere(
-        (e) =>
-            e.containerId == containerId &&
-            e.quinzaineDate == quinzaineDate,
+        (e) => e.containerId == containerId && e.quinzaineDate == quinzaineDate,
       );
     } catch (_) {
       return null;
@@ -60,9 +58,7 @@ class InterestAdjustmentsStore {
   ) {
     return _items
         .where(
-          (e) =>
-              e.containerId == containerId &&
-              e.applied == false,
+          (e) => e.containerId == containerId && e.applied == false,
         )
         .toList();
   }

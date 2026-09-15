@@ -2,27 +2,29 @@ import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../accounts/current_account.dart';
-import 'budget_bucket.dart';
+import '../../equity/split_rule.dart';
 
 class Category {
   final String id;
   final String name;
   final int colorValue; // Color.value
 
-  /// Classement 50/30/20 (uniquement utilisé dans ce mode de gestion).
-  final BudgetBucket? bucket;
+  /// Enveloppe de la méthode "pourcentages personnalisés" (uniquement
+  /// utilisé dans ce mode de gestion) — id référençant une entrée de
+  /// CloudAccount.effectiveBuckets.
+  final String? bucketId;
 
-  /// Support vers lequel l'argent de cette catégorie doit être viré
-  /// automatiquement (voir "Lancer le budget du mois"). `null` = l'argent
-  /// reste sur le compte source, pas de virement automatique.
-  final String? targetContainerId;
+  /// Règle de répartition entre membres d'un compte partagé pour les
+  /// dépenses de cette catégorie. `null` = répartition au prorata des
+  /// revenus (voir [SplitRule.proportional]).
+  final SplitRule? splitRule;
 
   Category({
     required this.id,
     required this.name,
     required this.colorValue,
-    this.bucket,
-    this.targetContainerId,
+    this.bucketId,
+    this.splitRule,
   });
 
   /// --- Sérialisation Supabase (colonnes en snake_case) ---
@@ -32,8 +34,8 @@ class Category {
       'id': id,
       'name': name,
       'color_value': colorValue,
-      'bucket': bucket?.index,
-      'target_container_id': targetContainerId,
+      'bucket': bucketId,
+      'split_rule': splitRule?.toMap(),
     };
   }
 
@@ -43,10 +45,10 @@ class Category {
       name: map['name'] as String,
       colorValue: (map['color_value'] as int?) ??
           _defaultColorForLegacy(map['id'] as String),
-      bucket: map['bucket'] != null
-          ? BudgetBucket.values[map['bucket'] as int]
+      bucketId: map['bucket'] as String?,
+      splitRule: map['split_rule'] != null
+          ? SplitRule.fromMap(Map<String, dynamic>.from(map['split_rule']))
           : null,
-      targetContainerId: map['target_container_id'] as String?,
     );
   }
 
@@ -103,17 +105,18 @@ class CategoriesStore {
     required String name,
     int? colorValue,
     int? color,
-    BudgetBucket? bucket,
-    String? targetContainerId,
+    String? bucketId,
+    String? id,
+    SplitRule? splitRule,
   }) async {
     final resolved = colorValue ?? color ?? Colors.blue.toARGB32();
 
     final category = Category(
-      id: DateTime.now().millisecondsSinceEpoch.toString(),
+      id: id ?? DateTime.now().millisecondsSinceEpoch.toString(),
       name: name,
       colorValue: resolved,
-      bucket: bucket,
-      targetContainerId: targetContainerId,
+      bucketId: bucketId,
+      splitRule: splitRule,
     );
 
     await _client.from('categories').insert({
@@ -131,10 +134,10 @@ class CategoriesStore {
     String? newName,
     int? colorValue,
     int? color,
-    BudgetBucket? bucket,
+    String? bucketId,
     bool clearBucket = false,
-    String? targetContainerId,
-    bool clearTargetContainer = false,
+    SplitRule? splitRule,
+    bool clearSplitRule = false,
   }) async {
     final index = _categories.indexWhere((c) => c.id == id);
     if (index == -1) return;
@@ -148,10 +151,8 @@ class CategoriesStore {
       id: old.id,
       name: resolvedName.isEmpty ? old.name : resolvedName,
       colorValue: resolvedColor,
-      bucket: clearBucket ? null : (bucket ?? old.bucket),
-      targetContainerId: clearTargetContainer
-          ? null
-          : (targetContainerId ?? old.targetContainerId),
+      bucketId: clearBucket ? null : (bucketId ?? old.bucketId),
+      splitRule: clearSplitRule ? null : (splitRule ?? old.splitRule),
     );
 
     await _client.from('categories').update(updated.toMap()).eq('id', id);

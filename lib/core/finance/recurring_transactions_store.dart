@@ -1,8 +1,12 @@
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../accounts/current_account.dart';
+import '../budget_rules/budget_automation_service.dart';
+import '../containers/containers_store.dart';
+import 'recurring_overrides_store.dart';
 import 'recurring_transaction.dart';
 import 'transaction.dart';
+import 'transaction_type.dart';
 import 'transactions_store.dart';
 
 /// Gabarits de transactions récurrentes du compte actif — stockés sur
@@ -26,8 +30,8 @@ class RecurringTransactionsStore {
     _items
       ..clear()
       ..addAll(
-        (rows as List)
-            .map((r) => RecurringTransaction.fromMap(r as Map<String, dynamic>)),
+        (rows as List).map(
+            (r) => RecurringTransaction.fromMap(r as Map<String, dynamic>)),
       );
   }
 
@@ -83,6 +87,68 @@ class RecurringTransactionsStore {
   // GÉNÉRATION
   // ─────────────────────────────────────────────
 
+  /// Nombre de mois entiers entre deux "YYYY-MM".
+  static int _monthsBetween(String fromMonthKey, String toMonthKey) {
+    final from = fromMonthKey.split('-');
+    final to = toMonthKey.split('-');
+    final fromYear = int.parse(from[0]);
+    final fromMonth = int.parse(from[1]);
+    final toYear = int.parse(to[0]);
+    final toMonth = int.parse(to[1]);
+    return (toYear - fromYear) * 12 + (toMonth - fromMonth);
+  }
+
+  /// Ajoute [months] mois à un "YYYY-MM".
+  static String _addMonths(String monthKey, int months) {
+    final parts = monthKey.split('-');
+    final year = int.parse(parts[0]);
+    final month = int.parse(parts[1]);
+    final total = (year * 12 + (month - 1)) + months;
+    final newYear = total ~/ 12;
+    final newMonth = (total % 12) + 1;
+    return '$newYear-${newMonth.toString().padLeft(2, '0')}';
+  }
+
+  /// Prochaine date calendaire à laquelle [r] est due, à partir de [from]
+  /// (aujourd'hui par défaut). Retourne `null` si le gabarit est inactif ou
+  /// si sa date de fin est déjà passée — utilisé pour l'affichage du widget
+  /// d'écran d'accueil ("ce qui reste à passer").
+  static DateTime? nextOccurrence(RecurringTransaction r, {DateTime? from}) {
+    if (!r.active) return null;
+
+    final now = from ?? DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final nowMonthKey = '${now.year}-${now.month.toString().padLeft(2, '0')}';
+
+    var candidateMonthKey = r.startMonthKey.compareTo(nowMonthKey) > 0
+        ? r.startMonthKey
+        : nowMonthKey;
+
+    final elapsed = _monthsBetween(r.startMonthKey, candidateMonthKey);
+    final remainder = elapsed % r.frequency.intervalMonths;
+    if (remainder != 0) {
+      candidateMonthKey =
+          _addMonths(candidateMonthKey, r.frequency.intervalMonths - remainder);
+    }
+
+    while (r.endMonthKey == null ||
+        candidateMonthKey.compareTo(r.endMonthKey!) <= 0) {
+      final parts = candidateMonthKey.split('-');
+      final year = int.parse(parts[0]);
+      final month = int.parse(parts[1]);
+      final lastDayOfMonth = DateTime(year, month + 1, 0).day;
+      final day = r.dayOfMonth.clamp(1, lastDayOfMonth);
+      final date = DateTime(year, month, day);
+
+      if (!date.isBefore(today)) return date;
+
+      candidateMonthKey =
+          _addMonths(candidateMonthKey, r.frequency.intervalMonths);
+    }
+
+    return null;
+  }
+
   static bool _isDue(RecurringTransaction r, String monthKey) {
     if (!r.active) return false;
     if (monthKey.compareTo(r.startMonthKey) < 0) return false;
@@ -91,11 +157,8 @@ class RecurringTransactionsStore {
     }
     if (r.lastGeneratedMonthKey == monthKey) return false;
 
-    if (r.frequency == RecurrenceFrequency.yearly) {
-      final startMonth = int.parse(r.startMonthKey.split('-')[1]);
-      final targetMonth = int.parse(monthKey.split('-')[1]);
-      if (startMonth != targetMonth) return false;
-    }
+    final elapsed = _monthsBetween(r.startMonthKey, monthKey);
+    if (elapsed % r.frequency.intervalMonths != 0) return false;
 
     return true;
   }
@@ -103,7 +166,10 @@ class RecurringTransactionsStore {
   /// Crée les transactions dues pour ce mois à partir des gabarits actifs.
   /// Idempotent : un gabarit déjà généré pour ce mois ne l'est pas deux fois.
   /// Retourne le nombre de transactions créées.
-  static Future<int> generateDueForMonth(String monthKey) async {
+  static Future<int> generateDueForMonth(
+    String monthKey,
+    ContainersStore containersStore,
+  ) async {
     int count = 0;
     final updatedTemplates = <Map<String, dynamic>>[];
 
@@ -116,19 +182,105 @@ class RecurringTransactionsStore {
       final month = int.parse(parts[1]);
       final lastDayOfMonth = DateTime(year, month + 1, 0).day;
       final day = r.dayOfMonth.clamp(1, lastDayOfMonth);
+      final date = DateTime(year, month, day);
+      final id = 'recurring_${r.id}_$monthKey';
+      // La date réelle (calendaire) reste dans le mois traité — seul le
+      // "mois budgétaire" auquel la transaction est rattachée se décale,
+      // si l'utilisateur l'a demandé (ex: salaire du 25 qui doit compter
+      // pour le mois suivant). Le solde affiché de l'app peut donc
+      // s'écarter temporairement du compte en banque réel jusqu'à la
+      // clôture du mois suivant — c'est le compromis assumé par ce choix.
+      final effectiveMonthKey =
+          r.countsForNextMonth ? _addMonths(monthKey, 1) : monthKey;
+      final legsForOverrideCheck = r.destinationLegs;
+      final isSplitTransfer = r.type == TransactionType.transfer &&
+          legsForOverrideCheck != null &&
+          legsForOverrideCheck.isNotEmpty;
+      final override = isSplitTransfer
+          ? null
+          : RecurringOverridesStore.getOverride(r.id, monthKey);
+      final effectiveAmount = override ?? r.amount;
+      if (override != null) {
+        await RecurringOverridesStore.clearOverride(r.id, monthKey);
+      }
 
-      await TransactionsStore.add(
-        Transaction(
-          id: 'recurring_${r.id}_$monthKey',
-          label: r.label,
-          amount: r.amount,
-          date: DateTime(year, month, day),
-          type: r.type,
-          category: r.category,
-          containerId: r.containerId,
-          monthKey: monthKey,
-        ),
-      );
+      if (r.type == TransactionType.transfer) {
+        if (r.containerId == null) continue;
+        final legs = r.destinationLegs;
+        if (legs == null && r.destinationContainerId == null) continue;
+
+        await TransactionsStore.add(
+          Transaction(
+            id: '${id}_out',
+            label: r.label,
+            amount: effectiveAmount,
+            date: date,
+            type: TransactionType.expense,
+            category: r.category,
+            containerId: r.containerId,
+            transferId: id,
+            monthKey: effectiveMonthKey,
+          ),
+        );
+
+        if (legs != null && legs.isNotEmpty) {
+          final destSplitGroupId = '${id}_dst';
+          for (int j = 0; j < legs.length; j++) {
+            final leg = legs[j];
+            await TransactionsStore.add(
+              Transaction(
+                id: '${id}_in_$j',
+                label: r.label,
+                amount: leg.amount,
+                date: date,
+                type: TransactionType.income,
+                category: leg.category,
+                containerId: leg.containerId,
+                transferId: id,
+                splitGroupId: destSplitGroupId,
+                monthKey: effectiveMonthKey,
+              ),
+            );
+            await BudgetAutomationService.applyCreditRepayment(
+              containersStore,
+              leg.containerId,
+              leg.amount,
+            );
+          }
+        } else {
+          await TransactionsStore.add(
+            Transaction(
+              id: '${id}_in',
+              label: r.label,
+              amount: effectiveAmount,
+              date: date,
+              type: TransactionType.income,
+              category: r.category,
+              containerId: r.destinationContainerId,
+              transferId: id,
+              monthKey: effectiveMonthKey,
+            ),
+          );
+          await BudgetAutomationService.applyCreditRepayment(
+            containersStore,
+            r.destinationContainerId,
+            effectiveAmount,
+          );
+        }
+      } else {
+        await TransactionsStore.add(
+          Transaction(
+            id: id,
+            label: r.label,
+            amount: effectiveAmount,
+            date: date,
+            type: r.type,
+            category: r.category,
+            containerId: r.containerId,
+            monthKey: effectiveMonthKey,
+          ),
+        );
+      }
 
       final updated = r.copyWith(lastGeneratedMonthKey: monthKey);
       _items[i] = updated;

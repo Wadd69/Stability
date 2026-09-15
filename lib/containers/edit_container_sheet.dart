@@ -19,6 +19,12 @@ class _EditContainerSheetState extends State<EditContainerSheet> {
   late TextEditingController _nameController;
   late TextEditingController _interestController;
 
+  late TextEditingController _creditOriginalController;
+  late TextEditingController _creditRemainingController;
+  late TextEditingController _creditMonthlyController;
+  late TextEditingController _creditRateController;
+  late CreditKind _creditKind;
+
   late ContainerType _type;
   late Color _color;
   late bool _isPrimary;
@@ -30,8 +36,7 @@ class _EditContainerSheetState extends State<EditContainerSheet> {
     final store = context.read<ContainersStore>();
     final hasPrimary = store.primaryCurrentAccount != null;
 
-    _nameController =
-        TextEditingController(text: widget.container?.name ?? '');
+    _nameController = TextEditingController(text: widget.container?.name ?? '');
 
     _type = widget.container?.type ??
         (hasPrimary
@@ -48,6 +53,31 @@ class _EditContainerSheetState extends State<EditContainerSheet> {
     _interestController = TextEditingController(
       text: lastRate?.toStringAsFixed(2) ?? '',
     );
+
+    _creditKind = widget.container?.creditKind ?? CreditKind.conso;
+    _creditOriginalController = TextEditingController(
+      text: widget.container?.creditOriginalAmount?.toStringAsFixed(2) ?? '',
+    );
+    _creditRemainingController = TextEditingController(
+      text: widget.container?.creditRemainingBalance?.toStringAsFixed(2) ?? '',
+    );
+    _creditMonthlyController = TextEditingController(
+      text: widget.container?.creditMonthlyPayment?.toStringAsFixed(2) ?? '',
+    );
+    _creditRateController = TextEditingController(
+      text: widget.container?.creditAnnualRate?.toStringAsFixed(2) ?? '',
+    );
+  }
+
+  @override
+  void dispose() {
+    _nameController.dispose();
+    _interestController.dispose();
+    _creditOriginalController.dispose();
+    _creditRemainingController.dispose();
+    _creditMonthlyController.dispose();
+    _creditRateController.dispose();
+    super.dispose();
   }
 
   @override
@@ -102,6 +132,7 @@ class _EditContainerSheetState extends State<EditContainerSheet> {
             // ────────────────
             DropdownButtonFormField<ContainerType>(
               initialValue: _type,
+              isExpanded: true,
               decoration: const InputDecoration(labelText: 'Type'),
               items: ContainerType.values
                   .map(
@@ -164,6 +195,60 @@ class _EditContainerSheetState extends State<EditContainerSheet> {
             ],
 
             // ────────────────
+            // CRÉDIT (IMMO / CONSO / REVOLVING)
+            // ────────────────
+            if (_type == ContainerType.credit) ...[
+              DropdownButtonFormField<CreditKind>(
+                initialValue: _creditKind,
+                isExpanded: true,
+                decoration: const InputDecoration(labelText: 'Type de crédit'),
+                items: CreditKind.values
+                    .map(
+                        (k) => DropdownMenuItem(value: k, child: Text(k.label)))
+                    .toList(),
+                onChanged: (v) => setState(() => _creditKind = v!),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: _creditRemainingController,
+                keyboardType:
+                    const TextInputType.numberWithOptions(decimal: true),
+                decoration: const InputDecoration(
+                  labelText: 'Capital restant dû (€)',
+                ),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: _creditMonthlyController,
+                keyboardType:
+                    const TextInputType.numberWithOptions(decimal: true),
+                decoration: const InputDecoration(
+                  labelText: 'Mensualité (€)',
+                  helperText: 'Saisie manuellement, pas de calcul automatique.',
+                ),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: _creditOriginalController,
+                keyboardType:
+                    const TextInputType.numberWithOptions(decimal: true),
+                decoration: const InputDecoration(
+                  labelText: 'Montant emprunté initial (optionnel)',
+                ),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: _creditRateController,
+                keyboardType:
+                    const TextInputType.numberWithOptions(decimal: true),
+                decoration: const InputDecoration(
+                  labelText: 'Taux d’intérêt annuel % (optionnel)',
+                ),
+              ),
+              const SizedBox(height: 12),
+            ],
+
+            // ────────────────
             // COULEUR
             // ────────────────
             Row(
@@ -201,13 +286,25 @@ class _EditContainerSheetState extends State<EditContainerSheet> {
                     _interestController.text.replaceAll(',', '.'),
                   );
 
+                  final creditOriginal = double.tryParse(
+                    _creditOriginalController.text.replaceAll(',', '.'),
+                  );
+                  final creditRemaining = double.tryParse(
+                    _creditRemainingController.text.replaceAll(',', '.'),
+                  );
+                  final creditMonthly = double.tryParse(
+                    _creditMonthlyController.text.replaceAll(',', '.'),
+                  );
+                  final creditRate = double.tryParse(
+                    _creditRateController.text.replaceAll(',', '.'),
+                  );
+
                   final now = DateTime.now();
 
                   ContainerModel container;
 
                   if (isEditing) {
-                    final existingRates =
-                        List<InterestRatePeriod>.from(
+                    final existingRates = List<InterestRatePeriod>.from(
                       widget.container!.interestRates,
                     );
 
@@ -228,6 +325,12 @@ class _EditContainerSheetState extends State<EditContainerSheet> {
                       type: _type,
                       interestRates: existingRates,
                       isPrimary: _isPrimary,
+                      creditKind:
+                          _type == ContainerType.credit ? _creditKind : null,
+                      creditOriginalAmount: creditOriginal,
+                      creditRemainingBalance: creditRemaining,
+                      creditMonthlyPayment: creditMonthly,
+                      creditAnnualRate: creditRate,
                     );
 
                     await store.updateContainer(container);
@@ -250,11 +353,16 @@ class _EditContainerSheetState extends State<EditContainerSheet> {
                       colorValue: _color.toARGB32(),
                       type: _type,
                       interestRates: rates,
+                      creditKind:
+                          _type == ContainerType.credit ? _creditKind : null,
+                      creditOriginalAmount: creditOriginal,
+                      creditRemainingBalance: creditRemaining,
+                      creditMonthlyPayment: creditMonthly,
+                      creditAnnualRate: creditRate,
                     );
                   }
 
-                  if (_isPrimary &&
-                      _type == ContainerType.currentAccount) {
+                  if (_isPrimary && _type == ContainerType.currentAccount) {
                     await store.setPrimaryCurrentAccount(container.id);
                   }
 

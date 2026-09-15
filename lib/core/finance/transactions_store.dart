@@ -1,7 +1,9 @@
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../accounts/current_account.dart';
+import '../containers/containers_store.dart';
 import 'transaction.dart';
+import 'transaction_analysis.dart';
 import 'package:stability/core/finance/transaction_type.dart';
 import 'package:stability/core/finance/monthly_balances_store.dart';
 
@@ -22,15 +24,14 @@ class TransactionsStore {
       return;
     }
 
-    final rows = await _client
-        .from('transactions')
-        .select()
-        .eq('account_id', accountId);
+    final rows =
+        await _client.from('transactions').select().eq('account_id', accountId);
 
     _transactions
       ..clear()
       ..addAll(
-        (rows as List).map((r) => Transaction.fromMap(r as Map<String, dynamic>)),
+        (rows as List)
+            .map((r) => Transaction.fromMap(r as Map<String, dynamic>)),
       );
   }
 
@@ -154,7 +155,10 @@ class TransactionsStore {
     final t = target.first;
 
     if (t.transferId != null) {
-      await _client.from('transactions').delete().eq('transfer_id', t.transferId!);
+      await _client
+          .from('transactions')
+          .delete()
+          .eq('transfer_id', t.transferId!);
       _transactions.removeWhere((e) => e.transferId == t.transferId);
     } else if (t.splitGroupId != null) {
       await _client
@@ -183,6 +187,7 @@ class TransactionsStore {
   static Future<void> closeMonth({
     required String monthKey,
     required String nextMonthKey,
+    required ContainersStore containersStore,
   }) async {
     final snapshot = List<Transaction>.from(_transactions);
     final rowsToUpsert = <Map<String, dynamic>>[];
@@ -200,6 +205,14 @@ class TransactionsStore {
     }
 
     for (final cid in containerIds) {
+      // Garde-fou d'idempotence : si cette clôture a déjà tourné une
+      // première fois pour ce conteneur (ex: nouvel essai après un échec
+      // réseau en cours de route), le solde de nextMonthKey a déjà été
+      // calculé — un second calcul partirait des transactions déjà
+      // archivées/reportées de l'étape 2 (donc "movements" à tort proche
+      // de 0) et écraserait la bonne valeur avec une mauvaise.
+      if (MonthlyBalancesStore.hasOpeningBalance(nextMonthKey, cid)) continue;
+
       final opening = MonthlyBalancesStore.getOpeningBalance(monthKey, cid);
 
       final movements = snapshot
@@ -210,8 +223,9 @@ class TransactionsStore {
               !t.isCarryOver)
           .fold<double>(
             0,
-            (sum, t) =>
-                t.type == TransactionType.income ? sum + t.amount : sum - t.amount,
+            (sum, t) => t.type == TransactionType.income
+                ? sum + t.amount
+                : sum - t.amount,
           );
 
       final endBalance = opening + movements;
@@ -325,9 +339,10 @@ class TransactionsStore {
     double income = 0;
     double expense = 0;
     for (final t in archivedTx) {
-      if (t.type == TransactionType.income) {
+      if (TransactionAnalysis.countsAsIncome(t)) {
         income += t.amount;
-      } else {
+      } else if (TransactionAnalysis.countsAsExpense(
+          t, archivedTx, containersStore)) {
         expense += t.amount;
       }
     }

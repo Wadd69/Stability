@@ -109,6 +109,136 @@ class _AccountSelectorScreenState extends State<AccountSelectorScreen> {
     }
   }
 
+  Future<void> _manageMembers(CloudAccount account) async {
+    List<Map<String, dynamic>> members = [];
+    bool loading = true;
+    String? error;
+
+    Future<void> load(void Function(void Function()) setModalState) async {
+      setModalState(() => loading = true);
+      try {
+        final result = await CloudAccountsRepository.fetchMembers(account.id);
+        setModalState(() {
+          members = result;
+          loading = false;
+          error = null;
+        });
+      } catch (e) {
+        setModalState(() {
+          loading = false;
+          error = 'Impossible de charger les membres';
+        });
+      }
+    }
+
+    await showDialog(
+      context: context,
+      builder: (_) => StatefulBuilder(
+        builder: (context, setModalState) {
+          if (loading && members.isEmpty && error == null) {
+            load(setModalState);
+          }
+          return AlertDialog(
+            title: Text('Membres — ${account.name}'),
+            content: SizedBox(
+              width: double.maxFinite,
+              child: loading
+                  ? const Padding(
+                      padding: EdgeInsets.all(16),
+                      child: Center(child: CircularProgressIndicator()),
+                    )
+                  : error != null
+                      ? Text(error!)
+                      : Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: members.map((m) {
+                            final userId = m['id'] as String;
+                            final email = m['email'] as String? ?? '';
+                            final displayName =
+                                (m['display_name'] as String?)?.trim();
+                            final label =
+                                (displayName != null && displayName.isNotEmpty)
+                                    ? displayName
+                                    : (email.isNotEmpty ? email : 'Membre');
+                            final isSelf =
+                                userId == AuthRepository.currentUser?.id;
+
+                            return ListTile(
+                              title: Text(label),
+                              subtitle: email.isNotEmpty ? Text(email) : null,
+                              trailing: isSelf
+                                  ? const Text('Vous')
+                                  : IconButton(
+                                      tooltip: 'Retirer',
+                                      icon: const Icon(
+                                        Icons.person_remove_outlined,
+                                      ),
+                                      onPressed: () async {
+                                        final confirm = await showDialog<bool>(
+                                          context: context,
+                                          builder: (_) => AlertDialog(
+                                            title: const Text(
+                                              'Retirer ce membre',
+                                            ),
+                                            content: Text(
+                                              '"$label" perdra l\'accès au '
+                                              'compte "${account.name}".',
+                                            ),
+                                            actions: [
+                                              TextButton(
+                                                onPressed: () => Navigator.pop(
+                                                    context, false),
+                                                child: const Text('Annuler'),
+                                              ),
+                                              TextButton(
+                                                onPressed: () => Navigator.pop(
+                                                    context, true),
+                                                child: Text(
+                                                  'Retirer',
+                                                  style: TextStyle(
+                                                    color: context
+                                                        .appColors.negative,
+                                                  ),
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                        );
+                                        if (confirm != true) return;
+                                        try {
+                                          await CloudAccountsRepository
+                                              .removeMember(account.id, userId);
+                                          await load(setModalState);
+                                        } catch (e) {
+                                          if (!context.mounted) return;
+                                          ScaffoldMessenger.of(context)
+                                              .showSnackBar(
+                                            const SnackBar(
+                                              content: Text(
+                                                'Impossible de retirer ce '
+                                                'membre.',
+                                              ),
+                                            ),
+                                          );
+                                        }
+                                      },
+                                    ),
+                            );
+                          }).toList(),
+                        ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('Fermer'),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+  }
+
   Future<void> _joinAccount() async {
     final controller = TextEditingController();
 
@@ -187,7 +317,21 @@ class _AccountSelectorScreenState extends State<AccountSelectorScreen> {
     } else {
       await CloudAccountsRepository.leaveAccount(account.id);
     }
-    _load();
+
+    final wasActive = account.id == CurrentAccount.active.id;
+    await _load();
+
+    // Le compte actif vient de disparaître : on bascule sur un autre
+    // compte restant (ou on vide complètement l'actif s'il n'en reste
+    // aucun) pour que le dashboard ne continue pas à afficher les
+    // données d'un compte supprimé une fois cet écran refermé.
+    if (wasActive) {
+      if (_accounts.isNotEmpty) {
+        CurrentAccount.active = _accounts.first;
+      } else {
+        CurrentAccount.clear();
+      }
+    }
   }
 
   Future<void> _signOut() async {
@@ -241,23 +385,28 @@ class _AccountSelectorScreenState extends State<AccountSelectorScreen> {
                             mainAxisSize: MainAxisSize.min,
                             children: [
                               if (isActive) const Icon(Icons.check),
-                              if (account.isShared && isOwner)
+                              if (account.isShared && isOwner) ...[
                                 IconButton(
                                   tooltip: 'Inviter',
                                   icon: const Icon(Icons.person_add_alt),
                                   onPressed: () => _inviteToAccount(account),
                                 ),
+                                IconButton(
+                                  tooltip: 'Gérer les membres',
+                                  icon: const Icon(Icons.group_outlined),
+                                  onPressed: () => _manageMembers(account),
+                                ),
+                              ],
                               IconButton(
                                 tooltip: 'Modifier',
                                 icon: const Icon(Icons.edit_outlined),
                                 onPressed: () => _editAccount(account),
                               ),
-                              if (!isActive)
-                                IconButton(
-                                  tooltip: isOwner ? 'Supprimer' : 'Quitter',
-                                  icon: const Icon(Icons.delete_outline),
-                                  onPressed: () => _leaveOrDelete(account),
-                                ),
+                              IconButton(
+                                tooltip: isOwner ? 'Supprimer' : 'Quitter',
+                                icon: const Icon(Icons.delete_outline),
+                                onPressed: () => _leaveOrDelete(account),
+                              ),
                             ],
                           ),
                           onTap: () {

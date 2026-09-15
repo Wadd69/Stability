@@ -4,9 +4,12 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import 'app_settings_store.dart';
+import '../accounts/account_security_screen.dart';
 import '../help/help_screen.dart';
 import '../help/help_topic.dart';
 import '../theme/app_colors.dart';
+import '../theme/app_theme.dart';
+import '../shared/color_wheel_picker.dart';
 import '../main.dart';
 import '../accounts/current_account.dart';
 import '../core/containers/containers_store.dart';
@@ -251,6 +254,112 @@ class _SettingsScreenState extends State<SettingsScreen> {
         padding: const EdgeInsets.all(16),
         children: [
           const Text(
+            'Apparence',
+            style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            'Clair, sombre, ou personnalisé avec la couleur de votre choix '
+            '(qui s\'adapte automatiquement au clair/sombre du système).',
+            style: TextStyle(
+              fontSize: 12,
+              color: Theme.of(context).colorScheme.onSurfaceVariant,
+            ),
+          ),
+          const SizedBox(height: 12),
+          ValueListenableBuilder<AppThemeChoice>(
+            valueListenable: AppSettingsStore.themeChoiceNotifier,
+            builder: (context, choice, _) {
+              return Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  SegmentedButton<AppThemeChoice>(
+                    segments: const [
+                      ButtonSegment(
+                        value: AppThemeChoice.light,
+                        label: Text('Clair'),
+                        icon: Icon(Icons.light_mode_outlined),
+                      ),
+                      ButtonSegment(
+                        value: AppThemeChoice.dark,
+                        label: Text('Sombre'),
+                        icon: Icon(Icons.dark_mode_outlined),
+                      ),
+                      ButtonSegment(
+                        value: AppThemeChoice.custom,
+                        label: Text('Personnalisé'),
+                        icon: Icon(Icons.palette_outlined),
+                      ),
+                    ],
+                    selected: {choice},
+                    onSelectionChanged: (s) =>
+                        AppSettingsStore.setThemeChoice(s.first),
+                  ),
+                  if (choice == AppThemeChoice.custom) ...[
+                    const SizedBox(height: 12),
+                    ValueListenableBuilder<Color?>(
+                      valueListenable: AppSettingsStore.accentColorNotifier,
+                      builder: (context, accentColor, _) {
+                        final current =
+                            accentColor ?? AppTheme.defaultSeedColor;
+                        return Row(
+                          children: [
+                            const Text('Couleur d\'accent'),
+                            const SizedBox(width: 12),
+                            GestureDetector(
+                              onTap: () async {
+                                final picked = await showColorWheelPicker(
+                                  context,
+                                  initialColor: current,
+                                );
+                                if (picked != null) {
+                                  AppSettingsStore.setAccentColor(picked);
+                                }
+                              },
+                              child: CircleAvatar(backgroundColor: current),
+                            ),
+                          ],
+                        );
+                      },
+                    ),
+                  ],
+                ],
+              );
+            },
+          ),
+          const SizedBox(height: 40),
+          const Divider(),
+          const SizedBox(height: 16),
+          const Text(
+            'Compte & sécurité',
+            style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            'Changer votre mot de passe ou l\'email utilisé pour vous '
+            'connecter.',
+            style: TextStyle(
+              fontSize: 12,
+              color: Theme.of(context).colorScheme.onSurfaceVariant,
+            ),
+          ),
+          const SizedBox(height: 12),
+          OutlinedButton.icon(
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => const AccountSecurityScreen(),
+                ),
+              );
+            },
+            icon: const Icon(Icons.lock_outline),
+            label: const Text('Compte & sécurité'),
+          ),
+          const SizedBox(height: 40),
+          const Divider(),
+          const SizedBox(height: 16),
+          const Text(
             'Actions / ETF',
             style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
           ),
@@ -277,11 +386,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
               child: const Text('Enregistrer'),
             ),
           ),
-
           const SizedBox(height: 40),
           const Divider(),
           const SizedBox(height: 16),
-
           const Text(
             'Sauvegarde locale',
             style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
@@ -308,11 +415,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
             icon: const Icon(Icons.restore),
             label: const Text('Restaurer une sauvegarde'),
           ),
-
           const SizedBox(height: 40),
           const Divider(),
           const SizedBox(height: 16),
-
           Text(
             'Zone de développement',
             style: TextStyle(

@@ -40,10 +40,8 @@ class InterestAdjustment {
     return InterestAdjustment(
       containerId: containerId,
       quinzaineDate: quinzaineDate,
-      computedInterest:
-          computedInterest ?? this.computedInterest,
-      correctedInterest:
-          correctedInterest ?? this.correctedInterest,
+      computedInterest: computedInterest ?? this.computedInterest,
+      correctedInterest: correctedInterest ?? this.correctedInterest,
       validatedAt: validatedAt ?? this.validatedAt,
       applied: applied ?? this.applied,
     );

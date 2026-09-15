@@ -32,14 +32,29 @@ dependencies:
   # 🔹 Sélecteur de couleurs (roue)
   flex_color_picker: ^3.5.1
 
+  # 🔹 Ouverture de liens externes (formulaires de retour)
+  url_launcher: ^6.3.0
+
+  # 🔹 Numéro de version affiché (bêta : corréler bugs et builds)
+  package_info_plus: ^8.0.0
+
+  # 🔹 Widget écran d'accueil (transactions récurrentes à venir)
+  home_widget: ^0.9.3
+
 dev_dependencies:
   flutter_test:
     sdk: flutter
 
   flutter_lints: ^6.0.0
   shared_preferences: ^2.3.0
+  flutter_launcher_icons: ^0.14.1
 
 flutter:
   uses-material-design: true
   assets:
     - assets/branding/
+
+flutter_launcher_icons:
+  android: true
+  ios: true
+  image_path: "assets/branding/app_icon_source.png"

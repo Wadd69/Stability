@@ -8,6 +8,7 @@ enum HelpTopic {
   transactionsList,
   budget,
   fiftyThirtyTwenty,
+  payYourselfFirst,
   categories,
   recurringTransactions,
   containers,
@@ -15,6 +16,7 @@ enum HelpTopic {
   insuranceLife,
   retirement,
   investment,
+  credit,
   archives,
   archiveDetail,
   globalHistory,
@@ -51,6 +53,13 @@ const Map<HelpTopic, HelpContent> helpContents = {
       'La flèche double (⏭) clôture le mois actif : les opérations pointées '
           'sont archivées, les autres passent au mois suivant sans impacter '
           'le solde.',
+      'Depuis le tiroir latéral (☰), "Personnaliser le dashboard" permet '
+          'd\'activer des blocs optionnels (alerte de dépassement de '
+          'budget, mini camembert, transactions récurrentes) et de choisir '
+          'quels supports afficher ici.',
+      'Une bannière rouge apparaît automatiquement en cas de dépassement '
+          'de budget sur une catégorie ou une enveloppe — un tap y ouvre '
+          'directement l\'écran concerné.',
     ],
   ),
   HelpTopic.netWorth: HelpContent(
@@ -98,23 +107,41 @@ const Map<HelpTopic, HelpContent> helpContents = {
           'd\'épargne (ex: 600€ pour des vacances) : la barre de progression '
           'suit le solde reporté au fil des mois, sans rien changer à votre '
           'façon d\'allouer le budget.',
+      'Ce montant alloué est purement indicatif : pour qu\'un virement se '
+          'fasse réellement chaque mois (ex: vers une épargne ou un '
+          'crédit), créez une transaction récurrente correspondante — voir '
+          'l\'aide "Transactions récurrentes".',
     ],
   ),
   HelpTopic.fiftyThirtyTwenty: HelpContent(
-    title: 'Règle 50 / 30 / 20',
+    title: 'Pourcentages personnalisés',
     paragraphs: [
-      'Cette méthode répartit votre revenu en trois enveloppes : 50% pour '
-          'les besoins essentiels (loyer, courses, factures), 30% pour les '
-          'envies (loisirs, sorties), 20% pour l\'épargne ou le remboursement '
-          'de dettes.',
-      'Chaque catégorie doit être classée dans l\'une des trois enveloppes '
+      'Cette méthode répartit votre revenu en enveloppes dont vous choisissez '
+          'le nom et le pourcentage (par défaut : Besoins 50%, Envies 30%, '
+          'Épargne 20% — la règle 50/30/20 classique, mais entièrement '
+          'modifiable depuis l\'icône ⚙️ de cet écran).',
+      'Chaque catégorie doit être classée dans l\'une de vos enveloppes '
           '(écran Catégories) pour que ses dépenses comptent dans le bon '
           'objectif.',
       'La barre devient rouge quand une enveloppe dépasse son objectif — '
           'contrairement au budget base zéro, il n\'y a pas d\'allocation '
-          'précise par catégorie, seulement ces trois grands objectifs.',
-      'Ce mode est actif uniquement pour les comptes configurés en "Règle '
-          '50/30/20" (voir le sélecteur de compte).',
+          'précise par catégorie, seulement des grands objectifs par '
+          'pourcentage.',
+    ],
+  ),
+  HelpTopic.payYourselfFirst: HelpContent(
+    title: 'Paie-toi en premier',
+    paragraphs: [
+      'Un seul objectif : un pourcentage de votre revenu prévisionnel part '
+          'automatiquement en épargne, avant toute autre dépense.',
+      'Réglez le pourcentage cible et le support de destination depuis '
+          'l\'icône ⚙️ de cet écran, puis "Lancer le versement du mois" crée '
+          'le virement — à confirmer ensuite avec "Valider le versement" une '
+          'fois réellement fait.',
+      'Le reste de votre argent n\'est pas suivi poste par poste : vous le '
+          'gérez librement, comme en mode "Suivi libre". Un budget mensuel '
+          'facultatif reste disponible par catégorie si vous voulez un garde-'
+          'fou sur certains postes.',
     ],
   ),
   HelpTopic.categories: HelpContent(
@@ -130,6 +157,14 @@ const Map<HelpTopic, HelpContent> helpContents = {
       'En mode "Règle 50/30/20", chaque catégorie peut aussi être classée '
           'en besoins, envies ou épargne, pour alimenter les objectifs de '
           'cette méthode.',
+      'En mode "Suivi libre" ou "Personnalisé", vous pouvez aussi définir '
+          'un budget mensuel par catégorie (facultatif) : une alerte '
+          'apparaît sur le dashboard dès que vous le dépassez, sans vous '
+          'obliger à allouer tout votre revenu comme en budget base zéro.',
+      'Pour un virement qui se répète automatiquement (loyer, épargne, '
+          'remboursement de crédit...), créez une transaction récurrente '
+          'depuis l\'écran dédié plutôt que d\'allouer un budget ici — voir '
+          'l\'aide "Transactions récurrentes".',
     ],
   ),
   HelpTopic.recurringTransactions: HelpContent(
@@ -138,6 +173,11 @@ const Map<HelpTopic, HelpContent> helpContents = {
       'Définissez ici les mouvements qui reviennent régulièrement (loyer, '
           'salaire, abonnements) : ils se créent automatiquement, sans que '
           'vous ayez à les ressaisir chaque mois.',
+      'En plus d\'Entrée et Sortie, "Transfert" crée un virement '
+          'automatique entre deux supports chaque mois (ex: 200€ vers votre '
+          'épargne, ou une mensualité de crédit) — c\'est ici que se '
+          'configure tout virement qui doit se répéter tout seul, y '
+          'compris vers un support "Crédit".',
       'La génération se fait à la clôture du mois (ou immédiatement si '
           'vous créez une récurrence déjà due pour le mois en cours).',
       'Le bouton bascule (on/off) permet de mettre une récurrence en pause '
@@ -160,6 +200,11 @@ const Map<HelpTopic, HelpContent> helpContents = {
           'actif.',
       'Assurance-vie, retraite et investissement ouvrent directement un '
           'écran dédié au tap, même sans argent dessus encore.',
+      'Un support "Crédit" (immo, conso, revolving) suit un capital '
+          'restant dû et une mensualité saisis à la main : pas de calcul '
+          'd\'échéancier, juste un suivi simple. Ce capital baisse '
+          'automatiquement quand un virement du budget du mois vers ce '
+          'support est validé.',
     ],
   ),
   HelpTopic.savingsInterests: HelpContent(
@@ -224,6 +269,22 @@ const Map<HelpTopic, HelpContent> helpContents = {
           'de coupure réseau, le dernier prix connu reste affiché.',
     ],
   ),
+  HelpTopic.credit: HelpContent(
+    title: 'Crédit',
+    paragraphs: [
+      'Suit un crédit immobilier, conso ou revolving : capital restant dû, '
+          'mensualité et taux saisis à la main — pas de calcul '
+          'd\'échéancier automatique, un suivi volontairement simple.',
+      'Le "temps restant estimé" est une simple division (capital restant '
+          '/ mensualité), recalculée à chaque fois que vous modifiez ces '
+          'valeurs — rien n\'est stocké.',
+      'Le capital restant dû baisse automatiquement dès qu\'un virement '
+          '(manuel ou récurrent) crédite ce support — inutile de le '
+          'modifier vous-même après un remboursement.',
+      'Modifiez capital, mensualité, taux ou type depuis l\'icône crayon '
+          'en haut à droite.',
+    ],
+  ),
   HelpTopic.archives: HelpContent(
     title: 'Archives',
     paragraphs: [
@@ -284,6 +345,14 @@ const Map<HelpTopic, HelpContent> helpContents = {
           'et ETF (gratuite, sans carte bancaire — voir finnhub.io).',
       'Sans clé configurée, le suivi crypto reste utilisable normalement : '
           'seule la partie actions/ETF en a besoin.',
+      'Comment obtenir une clé gratuite :\n'
+          '1. Allez sur finnhub.io et cliquez sur "Get free API key".\n'
+          '2. Créez un compte (email + mot de passe suffisent, aucune '
+          'carte bancaire demandée).\n'
+          '3. Une fois connecté, votre clé API personnelle s\'affiche sur '
+          'votre tableau de bord Finnhub (Dashboard).\n'
+          '4. Copiez-la et collez-la dans le champ "Clé API Finnhub" ici, '
+          'puis appuyez sur "Enregistrer".',
     ],
   ),
 };

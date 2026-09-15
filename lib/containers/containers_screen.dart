@@ -27,8 +27,7 @@ class ContainersScreen extends StatelessWidget {
               Navigator.push(
                 context,
                 MaterialPageRoute(
-                  builder: (_) =>
-                      const HelpScreen(topic: HelpTopic.containers),
+                  builder: (_) => const HelpScreen(topic: HelpTopic.containers),
                 ),
               );
             },

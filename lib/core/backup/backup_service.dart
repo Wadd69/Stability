@@ -81,9 +81,13 @@ class BackupService {
   /// Liste les sauvegardes disponibles, la plus récente en premier.
   static Future<List<File>> listBackups() async {
     final dir = await backupDirectory();
-    final files = dir.listSync().whereType<File>().where(
+    final files = dir
+        .listSync()
+        .whereType<File>()
+        .where(
           (f) => f.path.endsWith('.json'),
-        ).toList();
+        )
+        .toList();
     files.sort(
       (a, b) => b.statSync().modified.compareTo(a.statSync().modified),
     );
@@ -96,7 +100,8 @@ class BackupService {
   /// lignes correspondantes seront rejetées par la contrainte de clé
   /// étrangère sur `account_id`.
   static Future<void> restoreFromFile(File file) async {
-    final decoded = jsonDecode(await file.readAsString()) as Map<String, dynamic>;
+    final decoded =
+        jsonDecode(await file.readAsString()) as Map<String, dynamic>;
     final tables = Map<String, dynamic>.from(decoded['tables'] as Map? ?? {});
 
     for (final tableName in tableNames) {

@@ -51,7 +51,8 @@ class ComparisonPeriod {
       year: month.year,
       month: month.month,
       sourceMonths: [month],
-      transactions: List.unmodifiable(TransactionsStore.archivedForMonth(month.id)),
+      transactions:
+          List.unmodifiable(TransactionsStore.archivedForMonth(month.id)),
       totalIncome: month.totalIncome,
       totalExpense: month.totalExpense,
       balance: month.balance,

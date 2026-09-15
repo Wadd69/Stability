@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:fl_chart/fl_chart.dart';
-import 'package:stability/core/finance/transaction_type.dart';
+import 'package:provider/provider.dart';
 
 import '../../core/comparison/comparison_period.dart';
+import '../../core/containers/containers_store.dart';
 import '../../core/finance/categories_store.dart';
 import '../../core/finance/transaction.dart';
+import '../../core/finance/transaction_analysis.dart';
 import '../../help/help_screen.dart';
 import '../../help/help_topic.dart';
 import '../../theme/app_colors.dart';
@@ -259,9 +261,8 @@ class _ComparisonHubScreenState extends State<ComparisonHubScreen> {
     return OutlinedButton(
       onPressed: () => setState(() => curveMetric = m),
       style: OutlinedButton.styleFrom(
-        backgroundColor: active
-            ? Theme.of(context).colorScheme.primaryContainer
-            : null,
+        backgroundColor:
+            active ? Theme.of(context).colorScheme.primaryContainer : null,
       ),
       child: Text(
         label,
@@ -304,6 +305,7 @@ class _ComparisonHubScreenState extends State<ComparisonHubScreen> {
           padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
           child: DropdownButtonFormField<ComparisonPeriod>(
             initialValue: selectedPeriod,
+            isExpanded: true,
             decoration: const InputDecoration(
               labelText: 'Période',
               border: OutlineInputBorder(),
@@ -382,9 +384,12 @@ class _ComparisonHubScreenState extends State<ComparisonHubScreen> {
   }
 
   Widget _sunDonutForPeriod(ComparisonPeriod period) {
+    final containersStore = context.read<ContainersStore>();
     final expenses = period.transactions
         .where((t) =>
-            t.type == TransactionType.expense && _allowed(t.category))
+            TransactionAnalysis.countsAsExpense(
+                t, period.transactions, containersStore) &&
+            _allowed(t.category))
         .toList();
 
     if (expenses.isEmpty) {
@@ -442,109 +447,111 @@ class _ComparisonHubScreenState extends State<ComparisonHubScreen> {
                 : (constraints.maxWidth / neededDiameter).clamp(0.0, 1.0);
 
             return Stack(
-          alignment: Alignment.center,
-          children: [
-            // ── anneau extérieur : transactions (si focus catégorie)
-            if (focusedCategoryId != null && details.isNotEmpty)
-              PieChart(
-                PieChartData(
-                  startDegreeOffset: -90,
-                  centerSpaceRadius: focusedCenterSpace * scale,
-                  sectionsSpace: 2,
-                  sections: details.map((t) {
-                    final ratio = detailsSum == 0 ? 0 : t.amount / detailsSum;
-                    final showLabel = ratio > 0.06;
+              alignment: Alignment.center,
+              children: [
+                // ── anneau extérieur : transactions (si focus catégorie)
+                if (focusedCategoryId != null && details.isNotEmpty)
+                  PieChart(
+                    PieChartData(
+                      startDegreeOffset: -90,
+                      centerSpaceRadius: focusedCenterSpace * scale,
+                      sectionsSpace: 2,
+                      sections: details.map((t) {
+                        final ratio =
+                            detailsSum == 0 ? 0 : t.amount / detailsSum;
+                        final showLabel = ratio > 0.06;
 
-                    return PieChartSectionData(
-                      value: t.amount,
-                      radius: focusedRadius * scale,
-                      color: _shadeFromAmount(
-                        _baseCategoryColor(focusedCategoryId),
-                        t.amount,
-                        min,
-                        max,
-                      ),
-                      title: showLabel
-                          ? donutAsPercentage
-                              ? '${(ratio * 100).toStringAsFixed(1)}%'
-                              : '${t.amount.toStringAsFixed(0)}$_currency'
-                          : '',
-                      titleStyle: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 9,
-                        fontWeight: FontWeight.w600,
-                      ),
-                      titlePositionPercentageOffset: 0.62,
-                    );
-                  }).toList(),
-                ),
-              ),
-
-            // ── anneau intérieur : catégories
-            PieChart(
-              PieChartData(
-                startDegreeOffset: -90,
-                centerSpaceRadius: baseCenterSpace * scale,
-                sectionsSpace: 2,
-                pieTouchData: PieTouchData(
-                  touchCallback: (event, response) {
-                    if (event is FlTapUpEvent &&
-                        response?.touchedSection != null) {
-                      final idx =
-                          response!.touchedSection!.touchedSectionIndex;
-                      if (idx >= 0 && idx < cats.length) {
-                        setState(() {
-                          focusedCategoryId = cats[idx].key;
-                        });
-                      }
-                    }
-                  },
-                ),
-                sections: cats.map((e) {
-                  final ratio = totalSum == 0 ? 0 : e.value / totalSum;
-                  return PieChartSectionData(
-                    value: e.value,
-                    radius: baseRadius * scale,
-                    color: _shade(_baseCategoryColor(e.key), 0.85),
-                    title: donutAsPercentage
-                        ? '${(ratio * 100).toStringAsFixed(1)}%'
-                        : '${e.value.toStringAsFixed(0)}$_currency',
-                    titleStyle: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 11,
-                      fontWeight: FontWeight.w700,
-                    ),
-                    titlePositionPercentageOffset: 0.62,
-                  );
-                }).toList(),
-              ),
-            ),
-
-            // ── centre
-            IgnorePointer(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(
-                    focusedCategoryId == null
-                        ? 'Total'
-                        : _categoryName(focusedCategoryId),
-                    style: const TextStyle(fontWeight: FontWeight.w600),
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    focusedCategoryId == null
-                        ? '${totalSum.toStringAsFixed(0)}$_currency'
-                        : '${detailsSum.toStringAsFixed(0)}$_currency',
-                    style: const TextStyle(
-                      fontWeight: FontWeight.w800,
-                      fontSize: 16,
+                        return PieChartSectionData(
+                          value: t.amount,
+                          radius: focusedRadius * scale,
+                          color: _shadeFromAmount(
+                            _baseCategoryColor(focusedCategoryId),
+                            t.amount,
+                            min,
+                            max,
+                          ),
+                          title: showLabel
+                              ? donutAsPercentage
+                                  ? '${t.label}\n${(ratio * 100).toStringAsFixed(1)}%'
+                                  : '${t.label}\n${t.amount.toStringAsFixed(0)}$_currency'
+                              : '',
+                          titleStyle: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 9,
+                            fontWeight: FontWeight.w600,
+                            height: 1.2,
+                          ),
+                          titlePositionPercentageOffset: 0.62,
+                        );
+                      }).toList(),
                     ),
                   ),
-                ],
-              ),
-            ),
-          ],
+
+                // ── anneau intérieur : catégories
+                PieChart(
+                  PieChartData(
+                    startDegreeOffset: -90,
+                    centerSpaceRadius: baseCenterSpace * scale,
+                    sectionsSpace: 2,
+                    pieTouchData: PieTouchData(
+                      touchCallback: (event, response) {
+                        if (event is FlTapUpEvent &&
+                            response?.touchedSection != null) {
+                          final idx =
+                              response!.touchedSection!.touchedSectionIndex;
+                          if (idx >= 0 && idx < cats.length) {
+                            setState(() {
+                              focusedCategoryId = cats[idx].key;
+                            });
+                          }
+                        }
+                      },
+                    ),
+                    sections: cats.map((e) {
+                      final ratio = totalSum == 0 ? 0 : e.value / totalSum;
+                      return PieChartSectionData(
+                        value: e.value,
+                        radius: baseRadius * scale,
+                        color: _shade(_baseCategoryColor(e.key), 0.85),
+                        title: donutAsPercentage
+                            ? '${(ratio * 100).toStringAsFixed(1)}%'
+                            : '${e.value.toStringAsFixed(0)}$_currency',
+                        titleStyle: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 11,
+                          fontWeight: FontWeight.w700,
+                        ),
+                        titlePositionPercentageOffset: 0.62,
+                      );
+                    }).toList(),
+                  ),
+                ),
+
+                // ── centre
+                IgnorePointer(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        focusedCategoryId == null
+                            ? 'Total'
+                            : _categoryName(focusedCategoryId),
+                        style: const TextStyle(fontWeight: FontWeight.w600),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        focusedCategoryId == null
+                            ? '${totalSum.toStringAsFixed(0)}$_currency'
+                            : '${detailsSum.toStringAsFixed(0)}$_currency',
+                        style: const TextStyle(
+                          fontWeight: FontWeight.w800,
+                          fontSize: 16,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
             );
           },
         ),

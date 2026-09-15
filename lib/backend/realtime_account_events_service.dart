@@ -14,15 +14,10 @@ class AccountEvent {
 }
 
 /// Notifications en temps réel pour les comptes partagés, basées sur
-/// Supabase Realtime (`postgres_changes`).
-///
-/// Limite importante : les transactions, catégories et supports restent
-/// aujourd'hui purement locaux (Hive), seules les tables `accounts` et
-/// `account_members` existent côté Supabase. Il n'est donc pas possible de
-/// notifier "un tiers a fait un mouvement" — seuls les événements
-/// d'adhésion et de modification du compte lui-même sont détectables ici.
-/// Notifier les mouvements réels nécessiterait de migrer les transactions
-/// vers Supabase (chantier séparé, plus important).
+/// Supabase Realtime (`postgres_changes`) : adhésion/départ d'un membre,
+/// modification du compte, et mouvements d'argent (transactions ajoutées,
+/// modifiées ou supprimées) puisque ces données vivent maintenant sur
+/// Supabase comme le reste.
 class RealtimeAccountEventsService {
   RealtimeChannel? _channel;
   final _controller = StreamController<AccountEvent>.broadcast();
@@ -78,6 +73,44 @@ class RealtimeAccountEventsService {
           callback: (payload) => _controller.add(
             AccountEvent(
               message: 'Le compte a été modifié',
+              at: DateTime.now(),
+            ),
+          ),
+        )
+        .onPostgresChanges(
+          event: PostgresChangeEvent.insert,
+          schema: 'public',
+          table: 'transactions',
+          filter: PostgresChangeFilter(
+            type: PostgresChangeFilterType.eq,
+            column: 'account_id',
+            value: accountId,
+          ),
+          callback: (payload) {
+            final row = payload.newRecord;
+            final label = row['label'] as String? ?? 'Opération';
+            final amount = (row['amount'] as num?)?.toDouble() ?? 0;
+            _controller.add(
+              AccountEvent(
+                message:
+                    'Nouvelle opération : $label (${amount.toStringAsFixed(2)} €)',
+                at: DateTime.now(),
+              ),
+            );
+          },
+        )
+        .onPostgresChanges(
+          event: PostgresChangeEvent.delete,
+          schema: 'public',
+          table: 'transactions',
+          filter: PostgresChangeFilter(
+            type: PostgresChangeFilterType.eq,
+            column: 'account_id',
+            value: accountId,
+          ),
+          callback: (payload) => _controller.add(
+            AccountEvent(
+              message: 'Une opération a été supprimée',
               at: DateTime.now(),
             ),
           ),

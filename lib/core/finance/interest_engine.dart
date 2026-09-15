@@ -31,9 +31,7 @@ class InterestEngine {
       current = DateTime(current.year, current.month + 1, 1);
     }
 
-    return dates
-        .where((d) => !d.isBefore(start) && !d.isAfter(end))
-        .toList();
+    return dates.where((d) => !d.isBefore(start) && !d.isAfter(end)).toList();
   }
 
   /// Date réelle de prise en compte d’une transaction
@@ -70,16 +68,13 @@ class InterestEngine {
 
         final effective = effectiveDate(t);
         if (!effective.isAfter(q)) {
-          capital += t.type == TransactionType.income
-              ? t.amount
-              : -t.amount;
+          capital += t.type == TransactionType.income ? t.amount : -t.amount;
         }
       }
 
       if (capital <= 0) continue;
 
-      final interest =
-          capital * (annualRate / 100) / 24;
+      final interest = capital * (annualRate / 100) / 24;
 
       lines.add(
         InterestLine(

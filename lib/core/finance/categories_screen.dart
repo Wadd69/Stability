@@ -1,14 +1,17 @@
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
 import 'categories_store.dart';
-import 'budget_bucket.dart';
+import 'active_month_store.dart';
+import 'edit_recurring_transaction_sheet.dart';
 import '../../help/help_screen.dart';
 import '../../help/help_topic.dart';
 import '../../accounts/current_account.dart';
 import '../../accounts/management_mode.dart';
 import '../../theme/app_colors.dart';
 import '../../shared/color_wheel_picker.dart';
-import '../containers/containers_store.dart';
+import '../budget_rules/category_allocations_store.dart';
+import '../../equity/account_members_store.dart';
+import '../../equity/split_rule.dart';
+import '../../equity/split_rule_editor.dart';
 
 class CategoriesScreen extends StatefulWidget {
   const CategoriesScreen({super.key});
@@ -40,41 +43,35 @@ class _CategoriesScreenState extends State<CategoriesScreen> {
     );
   }
 
-  Widget _targetContainerPicker({
-    required String? selected,
-    required ValueChanged<String?> onChanged,
-  }) {
-    final containers = context.read<ContainersStore>().active;
-    return Padding(
-      padding: const EdgeInsets.only(top: 16),
-      child: DropdownButtonFormField<String?>(
-        initialValue: selected,
-        decoration: const InputDecoration(
-          labelText: 'Support de destination (optionnel)',
-          helperText:
-              'Où va l\'argent de cette catégorie quand vous lancez le '
-              'budget du mois. Laissez vide pour ne rien virer.',
-        ),
-        items: [
-          const DropdownMenuItem<String?>(
-            value: null,
-            child: Text('Aucun — reste sur le compte source'),
-          ),
-          ...containers.map(
-            (c) => DropdownMenuItem<String?>(
-              value: c.id,
-              child: Text(c.name),
-            ),
-          ),
-        ],
-        onChanged: onChanged,
+  /// Ouvre la page d'aide "Rubriques", qui explique en détail le support de
+  /// destination et le budget mensuel — le texte d'aide complet ne tient
+  /// pas dans un helperText de champ sans être coupé.
+  void _openCategoriesHelp() {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => const HelpScreen(topic: HelpTopic.categories),
       ),
     );
   }
 
+  Widget _dialogTitle(String text) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Expanded(child: Text(text)),
+        IconButton(
+          tooltip: 'Aide',
+          icon: const Icon(Icons.help_outline),
+          onPressed: _openCategoriesHelp,
+        ),
+      ],
+    );
+  }
+
   Widget _bucketChips({
-    required BudgetBucket? selected,
-    required ValueChanged<BudgetBucket?> onChanged,
+    required String? selected,
+    required ValueChanged<String?> onChanged,
   }) {
     if (CurrentAccount.active.managementMode !=
         ManagementMode.fiftyThirtyTwenty) {
@@ -91,12 +88,38 @@ class _CategoriesScreenState extends State<CategoriesScreen> {
             selected: selected == null,
             onSelected: (_) => onChanged(null),
           ),
-          ...BudgetBucket.values.map((b) => ChoiceChip(
-                label: Text(b.label),
-                selected: selected == b,
-                onSelected: (_) => onChanged(b),
+          ...CurrentAccount.active.effectiveBuckets.map((b) => ChoiceChip(
+                label: Text(
+                    '${b.name} (${(b.targetShare * 100).toStringAsFixed(0)}%)'),
+                selected: selected == b.id,
+                onSelected: (_) => onChanged(b.id),
               )),
         ],
+      ),
+    );
+  }
+
+  /// Budget mensuel facultatif par rubrique, pour les modes qui n'ont pas
+  /// déjà de mécanisme d'allocation dédié (budget base zéro : écran
+  /// Budget ; 50/30/20 : enveloppes par bucket). Alimente l'alerte de
+  /// dépassement du dashboard en mode "Suivi libre" / "Personnalisé".
+  Widget _monthlyBudgetField(TextEditingController controller) {
+    final mode = CurrentAccount.active.managementMode;
+    if (mode != ManagementMode.free &&
+        mode != ManagementMode.custom &&
+        mode != ManagementMode.payYourselfFirst) {
+      return const SizedBox.shrink();
+    }
+
+    return Padding(
+      padding: const EdgeInsets.only(top: 16),
+      child: TextField(
+        controller: controller,
+        keyboardType: const TextInputType.numberWithOptions(decimal: true),
+        decoration: const InputDecoration(
+          labelText: 'Budget mensuel (optionnel)',
+          helperText: 'Alerte sur le dashboard si dépassé ce mois-ci.',
+        ),
       ),
     );
   }
@@ -106,15 +129,16 @@ class _CategoriesScreenState extends State<CategoriesScreen> {
   // ─────────────────────────────────
   void _addCategory() {
     final controller = TextEditingController();
+    final budgetController = TextEditingController();
     Color selectedColor = Colors.blue;
-    BudgetBucket? selectedBucket;
-    String? selectedTargetContainerId;
+    String? selectedBucket;
+    SplitRule? selectedSplitRule;
 
     showDialog(
       context: context,
       builder: (_) => StatefulBuilder(
         builder: (context, setModalState) => AlertDialog(
-          title: const Text('Nouvelle catégorie'),
+          title: _dialogTitle('Nouvelle catégorie'),
           content: SingleChildScrollView(
             child: Column(
               mainAxisSize: MainAxisSize.min,
@@ -122,8 +146,7 @@ class _CategoriesScreenState extends State<CategoriesScreen> {
                 TextField(
                   controller: controller,
                   autofocus: true,
-                  decoration:
-                      const InputDecoration(labelText: 'Nom'),
+                  decoration: const InputDecoration(labelText: 'Nom'),
                 ),
                 const SizedBox(height: 16),
                 _colorPicker(
@@ -134,10 +157,11 @@ class _CategoriesScreenState extends State<CategoriesScreen> {
                   selected: selectedBucket,
                   onChanged: (b) => setModalState(() => selectedBucket = b),
                 ),
-                _targetContainerPicker(
-                  selected: selectedTargetContainerId,
-                  onChanged: (v) =>
-                      setModalState(() => selectedTargetContainerId = v),
+                _monthlyBudgetField(budgetController),
+                SplitRuleEditor(
+                  initialValue: selectedSplitRule,
+                  members: AccountMembersStore.all,
+                  onChanged: (r) => selectedSplitRule = r,
                 ),
               ],
             ),
@@ -151,12 +175,25 @@ class _CategoriesScreenState extends State<CategoriesScreen> {
               onPressed: () async {
                 final name = controller.text.trim();
                 if (name.isNotEmpty) {
+                  final newId =
+                      DateTime.now().millisecondsSinceEpoch.toString();
                   await CategoriesStore.add(
+                    id: newId,
                     name: name,
                     colorValue: selectedColor.toARGB32(),
-                    bucket: selectedBucket,
-                    targetContainerId: selectedTargetContainerId,
+                    bucketId: selectedBucket,
+                    splitRule: selectedSplitRule,
                   );
+                  final budget = double.tryParse(
+                    budgetController.text.trim().replaceAll(',', '.'),
+                  );
+                  if (budget != null && budget > 0) {
+                    await CategoryAllocationsStore.setAllocated(
+                      ActiveMonthStore.current,
+                      newId,
+                      budget,
+                    );
+                  }
                   if (mounted) setState(() {});
                 }
                 if (!context.mounted) return;
@@ -175,15 +212,22 @@ class _CategoriesScreenState extends State<CategoriesScreen> {
   // ─────────────────────────────────
   void _editCategory(Category category) {
     final controller = TextEditingController(text: category.name);
+    final currentBudget = CategoryAllocationsStore.getAllocated(
+      ActiveMonthStore.current,
+      category.id,
+    );
+    final budgetController = TextEditingController(
+      text: currentBudget > 0 ? currentBudget.toStringAsFixed(2) : '',
+    );
     Color selectedColor = Color(category.colorValue);
-    BudgetBucket? selectedBucket = category.bucket;
-    String? selectedTargetContainerId = category.targetContainerId;
+    String? selectedBucket = category.bucketId;
+    SplitRule? selectedSplitRule = category.splitRule;
 
     showDialog(
       context: context,
       builder: (_) => StatefulBuilder(
         builder: (context, setModalState) => AlertDialog(
-          title: const Text('Modifier la catégorie'),
+          title: _dialogTitle('Modifier la catégorie'),
           content: SingleChildScrollView(
             child: Column(
               mainAxisSize: MainAxisSize.min,
@@ -201,10 +245,25 @@ class _CategoriesScreenState extends State<CategoriesScreen> {
                   selected: selectedBucket,
                   onChanged: (b) => setModalState(() => selectedBucket = b),
                 ),
-                _targetContainerPicker(
-                  selected: selectedTargetContainerId,
-                  onChanged: (v) =>
-                      setModalState(() => selectedTargetContainerId = v),
+                _monthlyBudgetField(budgetController),
+                SplitRuleEditor(
+                  initialValue: selectedSplitRule,
+                  members: AccountMembersStore.all,
+                  onChanged: (r) => selectedSplitRule = r,
+                ),
+                const SizedBox(height: 16),
+                OutlinedButton.icon(
+                  onPressed: () async {
+                    await showModalBottomSheet(
+                      context: context,
+                      isScrollControlled: true,
+                      builder: (_) => EditRecurringTransactionSheet(
+                        initialCategoryId: category.id,
+                      ),
+                    );
+                  },
+                  icon: const Icon(Icons.event_repeat),
+                  label: const Text('Ajouter une transaction récurrente'),
                 ),
               ],
             ),
@@ -222,10 +281,19 @@ class _CategoriesScreenState extends State<CategoriesScreen> {
                     category.id,
                     newName: name, // ✅ marche (alias)
                     colorValue: selectedColor.toARGB32(), // ✅ marche
-                    bucket: selectedBucket,
+                    bucketId: selectedBucket,
                     clearBucket: selectedBucket == null,
-                    targetContainerId: selectedTargetContainerId,
-                    clearTargetContainer: selectedTargetContainerId == null,
+                    splitRule: selectedSplitRule,
+                    clearSplitRule: selectedSplitRule == null,
+                  );
+                  final budget = double.tryParse(
+                        budgetController.text.trim().replaceAll(',', '.'),
+                      ) ??
+                      0;
+                  await CategoryAllocationsStore.setAllocated(
+                    ActiveMonthStore.current,
+                    category.id,
+                    budget,
                   );
                   if (mounted) setState(() {});
                 }
@@ -288,8 +356,7 @@ class _CategoriesScreenState extends State<CategoriesScreen> {
               Navigator.push(
                 context,
                 MaterialPageRoute(
-                  builder: (_) =>
-                      const HelpScreen(topic: HelpTopic.categories),
+                  builder: (_) => const HelpScreen(topic: HelpTopic.categories),
                 ),
               );
             },
@@ -309,21 +376,27 @@ class _CategoriesScreenState extends State<CategoriesScreen> {
             )
           : ListView.separated(
               itemCount: categories.length,
-              separatorBuilder: (_, __) =>
-                  const Divider(height: 1),
+              separatorBuilder: (_, __) => const Divider(height: 1),
               itemBuilder: (context, index) {
                 final c = categories[index];
 
+                String? bucketName;
+                for (final b in CurrentAccount.active.effectiveBuckets) {
+                  if (b.id == c.bucketId) {
+                    bucketName = b.name;
+                    break;
+                  }
+                }
                 final showBucket = CurrentAccount.active.managementMode ==
                         ManagementMode.fiftyThirtyTwenty &&
-                    c.bucket != null;
+                    bucketName != null;
 
                 return ListTile(
                   leading: CircleAvatar(
                     backgroundColor: Color(c.colorValue),
                   ),
                   title: Text(c.name),
-                  subtitle: showBucket ? Text(c.bucket!.label) : null,
+                  subtitle: showBucket ? Text(bucketName) : null,
                   onTap: () => _editCategory(c),
                   trailing: IconButton(
                     icon: const Icon(Icons.delete),

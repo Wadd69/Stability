@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import 'package:stability/core/finance/finance.dart';
 import 'package:stability/core/finance/categories_store.dart';
+import '../core/containers/containers_store.dart';
+import '../core/finance/transaction_analysis.dart';
 import '../help/help_screen.dart';
 import '../help/help_topic.dart';
 import '../theme/app_colors.dart';
@@ -29,9 +32,16 @@ class _MonthRecapScreenState extends State<MonthRecapScreen> {
 
   // ─────────────────────────
   // 🔒 SOURCE UNIQUE D’ANALYSE
-  // Exclut STRICTEMENT les carryOver
-  List<Transaction> get _analysisTransactions =>
-      widget.transactions.where((t) => !t.isCarryOver).toList();
+  // Exclut STRICTEMENT les carryOver, et les virements neutres (voir
+  // TransactionAnalysis — un virement n'est ni une vraie dépense ni une
+  // vraie rentrée, sauf remboursement de crédit).
+  List<Transaction> get _analysisTransactions {
+    final containersStore = context.read<ContainersStore>();
+    return TransactionAnalysis.filterForAnalysis(
+      widget.transactions.where((t) => !t.isCarryOver).toList(),
+      containersStore,
+    );
+  }
 
   // ─────────────────────────
   // COULEURS (encore utilisées par l'accordéon ci-dessous)
@@ -78,8 +88,9 @@ class _MonthRecapScreenState extends State<MonthRecapScreen> {
             ),
             const SizedBox(height: 12),
             CategoryPieChart(
-              transactions:
-                  _analysisTransactions.where((t) => _allowed(t.category)).toList(),
+              transactions: _analysisTransactions
+                  .where((t) => _allowed(t.category))
+                  .toList(),
               mode: pieMode,
               asPercentage: asPercentage,
             ),
@@ -131,7 +142,9 @@ class _MonthRecapScreenState extends State<MonthRecapScreen> {
       trailing: Text(
         '${isIncome ? '+' : '-'}${t.amount.toStringAsFixed(2)}€',
         style: TextStyle(
-          color: isIncome ? context.appColors.positive : context.appColors.negative,
+          color: isIncome
+              ? context.appColors.positive
+              : context.appColors.negative,
           fontWeight: FontWeight.bold,
         ),
       ),
@@ -139,11 +152,9 @@ class _MonthRecapScreenState extends State<MonthRecapScreen> {
   }
 
   bool _allowed(String? id) =>
-      selectedCategories.contains('__ALL__') ||
-      selectedCategories.contains(id);
+      selectedCategories.contains('__ALL__') || selectedCategories.contains(id);
 
-  String _categoryName(String? id) =>
-      id == null
-          ? 'Sans catégorie'
-          : CategoriesStore.getById(id)?.name ?? 'Catégorie supprimée';
+  String _categoryName(String? id) => id == null
+      ? 'Sans catégorie'
+      : CategoriesStore.getById(id)?.name ?? 'Catégorie supprimée';
 }
