@@ -374,105 +374,113 @@ class _AddTransactionSheetState extends State<AddTransactionSheet> {
     if (!_isSourceSplit && _sourceContainerId == null) return;
     if (!_isDestSplit && _destinationContainerId == null) return;
 
-    final existingTransferId = widget.existing?.transferId;
-    if (existingTransferId != null) {
-      await TransactionsStore.remove(widget.existing!.id);
-    }
-    final transferId =
-        existingTransferId ?? DateTime.now().millisecondsSinceEpoch.toString();
+    try {
+      final existingTransferId = widget.existing?.transferId;
+      if (existingTransferId != null) {
+        await TransactionsStore.remove(widget.existing!.id);
+      }
+      final transferId = existingTransferId ??
+          DateTime.now().millisecondsSinceEpoch.toString();
 
-    // ── SOURCE ──
-    if (_isSourceSplit) {
-      final srcSplitGroupId = '${transferId}_src';
-      for (int i = 0; i < _sourceLegLines.length; i++) {
-        final line = _sourceLegLines[i];
+      // ── SOURCE ──
+      if (_isSourceSplit) {
+        final srcSplitGroupId = '${transferId}_src';
+        for (int i = 0; i < _sourceLegLines.length; i++) {
+          final line = _sourceLegLines[i];
+          await TransactionsStore.add(
+            Transaction(
+              id: '${transferId}_out_$i',
+              label: label,
+              amount: line.amount,
+              date: _selectedDate,
+              type: TransactionType.expense,
+              category: _selectedCategoryId,
+              containerId: line.containerId,
+              transferId: transferId,
+              splitGroupId: srcSplitGroupId,
+              monthKey: monthKey,
+            ),
+          );
+        }
+      } else {
         await TransactionsStore.add(
           Transaction(
-            id: '${transferId}_out_$i',
+            id: '${transferId}_out',
             label: label,
-            amount: line.amount,
+            amount: bothSplit ? sourceTotal : destTotal,
             date: _selectedDate,
             type: TransactionType.expense,
             category: _selectedCategoryId,
-            containerId: line.containerId,
+            containerId: _sourceContainerId,
             transferId: transferId,
-            splitGroupId: srcSplitGroupId,
             monthKey: monthKey,
           ),
         );
       }
-    } else {
-      await TransactionsStore.add(
-        Transaction(
-          id: '${transferId}_out',
-          label: label,
-          amount: bothSplit ? sourceTotal : destTotal,
-          date: _selectedDate,
-          type: TransactionType.expense,
-          category: _selectedCategoryId,
-          containerId: _sourceContainerId,
-          transferId: transferId,
-          monthKey: monthKey,
-        ),
-      );
-    }
 
-    // ── DESTINATION ──
-    // La réduction du capital restant dû (support "Crédit") ne s'applique
-    // qu'à la création d'un nouveau virement, jamais en édition — sinon
-    // modifier le montant d'un virement existant la déclencherait à
-    // nouveau et fausserait le capital restant (déjà réduit une première
-    // fois lors de la création).
-    final isNewTransfer = widget.existing == null;
-    final containersStore = context.read<ContainersStore>();
-    if (_isDestSplit) {
-      final dstSplitGroupId = '${transferId}_dst';
-      for (int j = 0; j < _destLegLines.length; j++) {
-        final line = _destLegLines[j];
+      // ── DESTINATION ──
+      // La réduction du capital restant dû (support "Crédit") ne s'applique
+      // qu'à la création d'un nouveau virement, jamais en édition — sinon
+      // modifier le montant d'un virement existant la déclencherait à
+      // nouveau et fausserait le capital restant (déjà réduit une première
+      // fois lors de la création).
+      final isNewTransfer = widget.existing == null;
+      final containersStore = context.read<ContainersStore>();
+      if (_isDestSplit) {
+        final dstSplitGroupId = '${transferId}_dst';
+        for (int j = 0; j < _destLegLines.length; j++) {
+          final line = _destLegLines[j];
+          await TransactionsStore.add(
+            Transaction(
+              id: '${transferId}_in_$j',
+              label: label,
+              amount: line.amount,
+              date: _selectedDate,
+              type: TransactionType.income,
+              category: line.categoryId,
+              containerId: line.containerId,
+              transferId: transferId,
+              splitGroupId: dstSplitGroupId,
+              monthKey: monthKey,
+            ),
+          );
+          if (isNewTransfer) {
+            await BudgetAutomationService.applyCreditRepayment(
+              containersStore,
+              line.containerId,
+              line.amount,
+            );
+          }
+        }
+      } else {
+        final destAmount = bothSplit ? destTotal : sourceTotal;
         await TransactionsStore.add(
           Transaction(
-            id: '${transferId}_in_$j',
+            id: '${transferId}_in',
             label: label,
-            amount: line.amount,
+            amount: destAmount,
             date: _selectedDate,
             type: TransactionType.income,
-            category: line.categoryId,
-            containerId: line.containerId,
+            category: _selectedCategoryId,
+            containerId: _destinationContainerId,
             transferId: transferId,
-            splitGroupId: dstSplitGroupId,
             monthKey: monthKey,
           ),
         );
         if (isNewTransfer) {
           await BudgetAutomationService.applyCreditRepayment(
             containersStore,
-            line.containerId,
-            line.amount,
+            _destinationContainerId,
+            destAmount,
           );
         }
       }
-    } else {
-      final destAmount = bothSplit ? destTotal : sourceTotal;
-      await TransactionsStore.add(
-        Transaction(
-          id: '${transferId}_in',
-          label: label,
-          amount: destAmount,
-          date: _selectedDate,
-          type: TransactionType.income,
-          category: _selectedCategoryId,
-          containerId: _destinationContainerId,
-          transferId: transferId,
-          monthKey: monthKey,
-        ),
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Échec de l\'enregistrement : $e')),
       );
-      if (isNewTransfer) {
-        await BudgetAutomationService.applyCreditRepayment(
-          containersStore,
-          _destinationContainerId,
-          destAmount,
-        );
-      }
+      return;
     }
 
     if (!mounted) return;
@@ -502,37 +510,45 @@ class _AddTransactionSheetState extends State<AddTransactionSheet> {
     // 🔀 DIVISÉ SUR PLUSIEURS CATÉGORIES
     // ─────────────────────────────────────────
     if (_isSplit) {
-      if (widget.existing != null) {
-        await TransactionsStore.remove(widget.existing!.id);
-      }
+      try {
+        if (widget.existing != null) {
+          await TransactionsStore.remove(widget.existing!.id);
+        }
 
-      final splitGroupId = widget.existing?.splitGroupId ??
-          DateTime.now().millisecondsSinceEpoch.toString();
+        final splitGroupId = widget.existing?.splitGroupId ??
+            DateTime.now().millisecondsSinceEpoch.toString();
 
-      for (int i = 0; i < _splitLines.length; i++) {
-        final line = _splitLines[i];
-        final lineAmount =
-            double.parse(line.amountController.text.replaceAll(',', '.'));
-        final lineLabel = label.isNotEmpty
-            ? label
-            : (line.categoryId != null
-                ? CategoriesStore.getById(line.categoryId!)?.name ?? ''
-                : '');
+        for (int i = 0; i < _splitLines.length; i++) {
+          final line = _splitLines[i];
+          final lineAmount =
+              double.parse(line.amountController.text.replaceAll(',', '.'));
+          final lineLabel = label.isNotEmpty
+              ? label
+              : (line.categoryId != null
+                  ? CategoriesStore.getById(line.categoryId!)?.name ?? ''
+                  : '');
 
-        await TransactionsStore.add(
-          Transaction(
-            id: '${splitGroupId}_$i',
-            label: lineLabel,
-            amount: lineAmount,
-            date: _selectedDate,
-            type: widget.type,
-            category: line.categoryId,
-            containerId: _sourceContainerId,
-            splitGroupId: splitGroupId,
-            monthKey: monthKey,
-            paidByUserId: _paidByUserId,
-          ),
+          await TransactionsStore.add(
+            Transaction(
+              id: '${splitGroupId}_$i',
+              label: lineLabel,
+              amount: lineAmount,
+              date: _selectedDate,
+              type: widget.type,
+              category: line.categoryId,
+              containerId: _sourceContainerId,
+              splitGroupId: splitGroupId,
+              monthKey: monthKey,
+              paidByUserId: _paidByUserId,
+            ),
+          );
+        }
+      } catch (e) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Échec de l\'enregistrement : $e')),
         );
+        return;
       }
 
       if (!mounted) return;
@@ -545,47 +561,55 @@ class _AddTransactionSheetState extends State<AddTransactionSheet> {
     // ─────────────────────────────────────────
     // ➕ ENTRÉE / ➖ SORTIE CLASSIQUE
     // ─────────────────────────────────────────
-    if (widget.existing == null) {
-      await TransactionsStore.add(
-        Transaction(
-          id: DateTime.now().millisecondsSinceEpoch.toString(),
-          label: label,
-          amount: amount,
-          date: _selectedDate,
-          type: widget.type,
-          category: _selectedCategoryId,
-          containerId: _sourceContainerId,
-          monthKey: monthKey,
-          paidByUserId: _paidByUserId,
-        ),
+    try {
+      if (widget.existing == null) {
+        await TransactionsStore.add(
+          Transaction(
+            id: DateTime.now().millisecondsSinceEpoch.toString(),
+            label: label,
+            amount: amount,
+            date: _selectedDate,
+            type: widget.type,
+            category: _selectedCategoryId,
+            containerId: _sourceContainerId,
+            monthKey: monthKey,
+            paidByUserId: _paidByUserId,
+          ),
+        );
+      } else if (widget.existing!.splitGroupId != null) {
+        // Reconsolidation d'un split en une transaction unique.
+        await TransactionsStore.remove(widget.existing!.id);
+        await TransactionsStore.add(
+          Transaction(
+            id: DateTime.now().millisecondsSinceEpoch.toString(),
+            label: label,
+            amount: amount,
+            date: _selectedDate,
+            type: widget.type,
+            category: _selectedCategoryId,
+            containerId: _sourceContainerId,
+            monthKey: monthKey,
+            paidByUserId: _paidByUserId,
+          ),
+        );
+      } else {
+        await TransactionsStore.updateTransaction(
+          widget.existing!.copyWith(
+            label: label,
+            amount: amount,
+            date: _selectedDate,
+            category: _selectedCategoryId,
+            containerId: _sourceContainerId,
+            paidByUserId: _paidByUserId,
+          ),
+        );
+      }
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Échec de l\'enregistrement : $e')),
       );
-    } else if (widget.existing!.splitGroupId != null) {
-      // Reconsolidation d'un split en une transaction unique.
-      await TransactionsStore.remove(widget.existing!.id);
-      await TransactionsStore.add(
-        Transaction(
-          id: DateTime.now().millisecondsSinceEpoch.toString(),
-          label: label,
-          amount: amount,
-          date: _selectedDate,
-          type: widget.type,
-          category: _selectedCategoryId,
-          containerId: _sourceContainerId,
-          monthKey: monthKey,
-          paidByUserId: _paidByUserId,
-        ),
-      );
-    } else {
-      await TransactionsStore.updateTransaction(
-        widget.existing!.copyWith(
-          label: label,
-          amount: amount,
-          date: _selectedDate,
-          category: _selectedCategoryId,
-          containerId: _sourceContainerId,
-          paidByUserId: _paidByUserId,
-        ),
-      );
+      return;
     }
 
     if (!mounted) return;

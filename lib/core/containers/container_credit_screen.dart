@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 
 import 'container_model.dart';
@@ -6,6 +8,35 @@ import '../../containers/edit_container_sheet.dart';
 import '../../help/help_screen.dart';
 import '../../help/help_topic.dart';
 import '../../theme/app_colors.dart';
+
+/// Nombre de mois restants avant remboursement complet, avec la formule
+/// d'amortissement standard (mensualité fixe, taux constant) — capital
+/// restant dû / mensualité seul ignore les intérêts et sous-estime
+/// fortement la durée réelle (ex: crédit immobilier).
+int? _monthsLeft({
+  required double? remaining,
+  required double? monthly,
+  required double? annualRate,
+}) {
+  if (remaining == null || monthly == null || monthly <= 0) return null;
+  if (remaining <= 0) return 0;
+
+  final monthlyRate = (annualRate ?? 0) / 100 / 12;
+  if (monthlyRate <= 0) {
+    return (remaining / monthly).ceil();
+  }
+
+  final interestPortion = monthlyRate * remaining;
+  if (monthly <= interestPortion) {
+    // La mensualité ne couvre même pas les intérêts du mois : à ce
+    // rythme le capital ne baissera jamais.
+    return null;
+  }
+
+  final n = math.log(monthly / (monthly - interestPortion)) /
+      math.log(1 + monthlyRate);
+  return n.ceil();
+}
 
 /// Écran dédié d'un support "Crédit" (immo, conso, revolving). Modèle
 /// volontairement simple : mensualité saisie à la main, capital restant dû
@@ -46,9 +77,8 @@ class _ContainerCreditScreenState extends State<ContainerCreditScreen> {
     final original = _container.creditOriginalAmount;
     final rate = _container.creditAnnualRate;
 
-    final monthsLeft = (remaining != null && monthly != null && monthly > 0)
-        ? (remaining / monthly).ceil()
-        : null;
+    final monthsLeft =
+        _monthsLeft(remaining: remaining, monthly: monthly, annualRate: rate);
 
     final progress = (original != null && original > 0 && remaining != null)
         ? (1 - (remaining / original)).clamp(0.0, 1.0)

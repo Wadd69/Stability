@@ -30,16 +30,80 @@ class _MonthRecapScreenState extends State<MonthRecapScreen> {
 
   final Set<String?> selectedCategories = {'__ALL__'};
 
+  /// Supports inclus dans l'analyse — `null` tant que non initialisé (voir
+  /// [_ensureContainerSelectionInitialized]), pour ne se limiter au compte
+  /// courant qu'une fois la liste des supports actifs connue.
+  Set<String>? _selectedContainerIds;
+
+  void _ensureContainerSelectionInitialized(ContainersStore containersStore) {
+    if (_selectedContainerIds != null) return;
+    final primary = containersStore.primaryCurrentAccount;
+    // Par défaut, limité au compte courant — sauf si aucun compte courant
+    // n'est défini, auquel cas on retombe sur tous les supports actifs
+    // pour ne jamais afficher une analyse vide sans raison claire.
+    _selectedContainerIds = primary != null
+        ? {primary.id}
+        : containersStore.active.map((c) => c.id).toSet();
+  }
+
   // ─────────────────────────
   // 🔒 SOURCE UNIQUE D’ANALYSE
   // Exclut STRICTEMENT les carryOver, et les virements neutres (voir
   // TransactionAnalysis — un virement n'est ni une vraie dépense ni une
-  // vraie rentrée, sauf remboursement de crédit).
+  // vraie rentrée, sauf remboursement de crédit). Limité par défaut au
+  // compte courant, mais l'utilisateur peut inclure d'autres supports
+  // (voir _accountSelector).
   List<Transaction> get _analysisTransactions {
     final containersStore = context.read<ContainersStore>();
+    _ensureContainerSelectionInitialized(containersStore);
+    final containerIds = _selectedContainerIds!;
+
+    final scoped = widget.transactions
+        .where((t) => containerIds.contains(t.containerId))
+        .toList();
+
     return TransactionAnalysis.filterForAnalysis(
-      widget.transactions.where((t) => !t.isCarryOver).toList(),
+      scoped.where((t) => !t.isCarryOver).toList(),
       containersStore,
+    );
+  }
+
+  Widget _accountSelector(ContainersStore containersStore) {
+    final containers = containersStore.active;
+    if (containers.length < 2) return const SizedBox.shrink();
+
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'Comptes inclus dans l\'analyse',
+            style: TextStyle(fontWeight: FontWeight.w600),
+          ),
+          const SizedBox(height: 8),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: containers.map((c) {
+              final selected = _selectedContainerIds!.contains(c.id);
+              return FilterChip(
+                label: Text(c.name),
+                selected: selected,
+                onSelected: (v) {
+                  setState(() {
+                    if (v) {
+                      _selectedContainerIds!.add(c.id);
+                    } else {
+                      _selectedContainerIds!.remove(c.id);
+                    }
+                  });
+                },
+              );
+            }).toList(),
+          ),
+        ],
+      ),
     );
   }
 
@@ -54,6 +118,9 @@ class _MonthRecapScreenState extends State<MonthRecapScreen> {
   // ─────────────────────────
   @override
   Widget build(BuildContext context) {
+    final containersStore = context.watch<ContainersStore>();
+    _ensureContainerSelectionInitialized(containersStore);
+
     return Scaffold(
       appBar: AppBar(
         title: Text('Analyse – ${widget.monthLabel}'),
@@ -81,6 +148,7 @@ class _MonthRecapScreenState extends State<MonthRecapScreen> {
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
+          _accountSelector(containersStore),
           if (showPie) ...[
             PieChartModeSelector(
               value: pieMode,

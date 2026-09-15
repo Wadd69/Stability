@@ -4,7 +4,32 @@ import 'package:provider/provider.dart';
 import '../core/containers/containers_store.dart';
 import '../core/containers/container_model.dart';
 import '../core/containers/container_type.dart';
+import '../core/finance/active_month_store.dart';
+import '../core/finance/monthly_balances_store.dart';
+import '../core/finance/transaction.dart';
+import '../core/finance/transaction_type.dart';
+import '../core/finance/transactions_store.dart';
 import '../shared/color_wheel_picker.dart';
+
+/// Types de support dont la valeur est un simple solde (voir aussi
+/// `ForecastService._hasSimpleBalance`) — seuls ceux-là ont un sens pour
+/// un "solde de départ" saisi à la main à la création (les autres ont
+/// leurs propres champs dédiés : crédit, assurance-vie, etc.).
+bool _hasSimpleBalance(ContainerType type) {
+  switch (type) {
+    case ContainerType.currentAccount:
+    case ContainerType.savingsAccount:
+    case ContainerType.cash:
+    case ContainerType.projectFund:
+    case ContainerType.other:
+      return true;
+    case ContainerType.insuranceLife:
+    case ContainerType.retirementAccount:
+    case ContainerType.investmentAccount:
+    case ContainerType.credit:
+      return false;
+  }
+}
 
 class EditContainerSheet extends StatefulWidget {
   final ContainerModel? container;
@@ -18,6 +43,7 @@ class EditContainerSheet extends StatefulWidget {
 class _EditContainerSheetState extends State<EditContainerSheet> {
   late TextEditingController _nameController;
   late TextEditingController _interestController;
+  late TextEditingController _startingBalanceController;
 
   late TextEditingController _creditOriginalController;
   late TextEditingController _creditRemainingController;
@@ -67,6 +93,8 @@ class _EditContainerSheetState extends State<EditContainerSheet> {
     _creditRateController = TextEditingController(
       text: widget.container?.creditAnnualRate?.toStringAsFixed(2) ?? '',
     );
+
+    _startingBalanceController = TextEditingController();
   }
 
   @override
@@ -77,6 +105,7 @@ class _EditContainerSheetState extends State<EditContainerSheet> {
     _creditRemainingController.dispose();
     _creditMonthlyController.dispose();
     _creditRateController.dispose();
+    _startingBalanceController.dispose();
     super.dispose();
   }
 
@@ -249,6 +278,28 @@ class _EditContainerSheetState extends State<EditContainerSheet> {
             ],
 
             // ────────────────
+            // SOLDE DE DÉPART (CRÉATION UNIQUEMENT)
+            // Permet de démarrer directement avec le solde réel du support
+            // (on ne part pas forcément de 0€ ni du 1er du mois) sans avoir
+            // à ressaisir tout l'historique des mouvements passés.
+            // ────────────────
+            if (!isEditing && _hasSimpleBalance(_type)) ...[
+              TextField(
+                controller: _startingBalanceController,
+                keyboardType: const TextInputType.numberWithOptions(
+                  decimal: true,
+                  signed: true,
+                ),
+                decoration: const InputDecoration(
+                  labelText: 'Solde de départ (optionnel)',
+                  helperText: 'Le solde réel actuel de ce support, pour ne '
+                      'pas devoir ressaisir tout l\'historique.',
+                ),
+              ),
+              const SizedBox(height: 12),
+            ],
+
+            // ────────────────
             // COULEUR
             // ────────────────
             Row(
@@ -360,6 +411,43 @@ class _EditContainerSheetState extends State<EditContainerSheet> {
                       creditMonthlyPayment: creditMonthly,
                       creditAnnualRate: creditRate,
                     );
+
+                    final startingBalance = double.tryParse(
+                      _startingBalanceController.text
+                          .trim()
+                          .replaceAll(',', '.'),
+                    );
+                    if (startingBalance != null &&
+                        startingBalance != 0 &&
+                        _hasSimpleBalance(_type)) {
+                      final monthKey = ActiveMonthStore.current;
+                      if (_type == ContainerType.currentAccount) {
+                        // Solde d'ouverture du mois : mêmes règles que la
+                        // clôture de mois (voir MonthlyBalancesStore).
+                        await MonthlyBalancesStore.setOpeningBalance(
+                          monthKey,
+                          container.id,
+                          startingBalance,
+                        );
+                      } else {
+                        // Pour les autres types, la valeur affichée est la
+                        // somme de tout l'historique des mouvements : un
+                        // seul mouvement de régularisation suffit.
+                        await TransactionsStore.add(
+                          Transaction(
+                            id: 'starting_${container.id}',
+                            label: 'Solde initial',
+                            amount: startingBalance.abs(),
+                            date: now,
+                            type: startingBalance >= 0
+                                ? TransactionType.income
+                                : TransactionType.expense,
+                            containerId: container.id,
+                            monthKey: monthKey,
+                          ),
+                        );
+                      }
+                    }
                   }
 
                   if (_isPrimary && _type == ContainerType.currentAccount) {

@@ -71,9 +71,17 @@ class AccountMembersStore {
 
   /// Revenu mensuel déclaré par l'utilisateur connecté pour le compte actif.
   static Future<void> setMyIncome(double amount) async {
-    final accountId = CurrentAccount.active.id;
     final userId = AuthRepository.currentUser?.id;
-    if (accountId.isEmpty || userId == null) return;
+    if (userId == null) return;
+    await setIncomeForUser(userId, amount);
+  }
+
+  /// Revenu mensuel déclaré pour un membre donné du compte actif — permet
+  /// à un membre de saisir le revenu d'un autre (ex: compte commun où une
+  /// seule personne gère l'app), pas seulement le sien.
+  static Future<void> setIncomeForUser(String userId, double amount) async {
+    final accountId = CurrentAccount.active.id;
+    if (accountId.isEmpty) return;
 
     await _client.from('account_member_incomes').upsert({
       'account_id': accountId,

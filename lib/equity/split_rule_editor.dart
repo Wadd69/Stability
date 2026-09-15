@@ -38,6 +38,12 @@ class _SplitRuleEditorState extends State<SplitRuleEditor> {
   void initState() {
     super.initState();
     _mode = widget.initialValue?.mode;
+    if (_mode == null && !widget.allowInherit) {
+      // Pas d'option "Suivre la catégorie" dans ce contexte : il faut un
+      // mode initial valide pour que le DropdownButtonFormField trouve
+      // une correspondance dans `items` (sinon assertion Flutter).
+      _mode = SplitMode.proportional;
+    }
     _assignedUserId = widget.initialValue?.assignedUserId ??
         (widget.members.isNotEmpty ? widget.members.first.userId : null);
 

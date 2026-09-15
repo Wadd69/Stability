@@ -16,6 +16,7 @@ class ContainersScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     final store = context.watch<ContainersStore>();
     final containers = store.active;
+    final archived = store.archived;
 
     return Scaffold(
       appBar: AppBar(
@@ -44,14 +45,26 @@ class ContainersScreen extends StatelessWidget {
         },
         child: const Icon(Icons.add),
       ),
-      body: containers.isEmpty
+      body: containers.isEmpty && archived.isEmpty
           ? const _EmptyState()
-          : ListView.builder(
-              itemCount: containers.length,
-              itemBuilder: (context, index) {
-                final container = containers[index];
-                return _ContainerTile(container: container);
-              },
+          : ListView(
+              children: [
+                for (final container in containers)
+                  _ContainerTile(container: container),
+                if (archived.isNotEmpty)
+                  ExpansionTile(
+                    // Un support "Supprimer"-é une première fois est
+                    // seulement archivé (voir ContainersStore.deleteContainer)
+                    // — il faut pouvoir le retrouver ici pour le supprimer
+                    // définitivement, sinon il reste invisible pour
+                    // toujours sans qu'on puisse finir de le supprimer.
+                    title: Text('Archivés (${archived.length})'),
+                    children: [
+                      for (final container in archived)
+                        _ContainerTile(container: container, isArchived: true),
+                    ],
+                  ),
+              ],
             ),
     );
   }
@@ -77,8 +90,9 @@ class _EmptyState extends StatelessWidget {
 
 class _ContainerTile extends StatelessWidget {
   final ContainerModel container;
+  final bool isArchived;
 
-  const _ContainerTile({required this.container});
+  const _ContainerTile({required this.container, this.isArchived = false});
 
   @override
   Widget build(BuildContext context) {
@@ -104,10 +118,19 @@ class _ContainerTile extends StatelessWidget {
             final confirm = await showDialog<bool>(
               context: context,
               builder: (_) => AlertDialog(
-                title: const Text('Supprimer le support'),
+                title: Text(
+                  isArchived
+                      ? 'Supprimer définitivement'
+                      : 'Supprimer le support',
+                ),
                 content: Text(
-                  'Le support "${container.name}" sera supprimé.\n\n'
-                  'Cette action est définitive.',
+                  isArchived
+                      ? 'Le support "${container.name}" et son historique '
+                          'seront définitivement supprimés. Cette action est '
+                          'irréversible.'
+                      : 'Le support "${container.name}" sera archivé (il '
+                          'restera visible dans "Archivés" pour suppression '
+                          'définitive).',
                 ),
                 actions: [
                   TextButton(
@@ -130,9 +153,13 @@ class _ContainerTile extends StatelessWidget {
             }
           }
         },
-        itemBuilder: (_) => const [
-          PopupMenuItem(value: 'edit', child: Text('Modifier')),
-          PopupMenuItem(value: 'delete', child: Text('Supprimer')),
+        itemBuilder: (_) => [
+          if (!isArchived)
+            const PopupMenuItem(value: 'edit', child: Text('Modifier')),
+          PopupMenuItem(
+            value: 'delete',
+            child: Text(isArchived ? 'Supprimer définitivement' : 'Supprimer'),
+          ),
         ],
       ),
     );

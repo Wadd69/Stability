@@ -144,7 +144,9 @@ class _NetWorthScreenState extends State<NetWorthScreen> {
         return _cryptoValue(c);
       case ContainerType.credit:
         // Une dette réduit le patrimoine net, contrairement aux autres
-        // types de support qui l'augmentent.
+        // types de support qui l'augmentent — sauf si l'utilisateur a
+        // désactivé cette déduction (voir AppSettingsStore).
+        if (!AppSettingsStore.deductCreditsFromNetWorth) return null;
         final remaining = c.creditRemainingBalance;
         return remaining == null ? null : -remaining;
     }
@@ -231,6 +233,23 @@ class _NetWorthScreenState extends State<NetWorthScreen> {
               ],
             ),
           ),
+          if (containers.any((c) => c.type == ContainerType.credit))
+            SwitchListTile(
+              dense: true,
+              contentPadding: const EdgeInsets.symmetric(horizontal: 16),
+              title: const Text(
+                'Déduire les crédits en cours',
+                style: TextStyle(fontSize: 13),
+              ),
+              subtitle: const Text(
+                'Soustrait le capital restant dû du patrimoine total',
+                style: TextStyle(fontSize: 11),
+              ),
+              value: AppSettingsStore.deductCreditsFromNetWorth,
+              onChanged: (v) {
+                setState(() => AppSettingsStore.setDeductCreditsFromNetWorth(v));
+              },
+            ),
           const Divider(height: 1),
           Expanded(
             child: rows.isEmpty

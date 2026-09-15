@@ -25,6 +25,11 @@ class ForecastItem {
   final String? overrideMonthKey;
   final bool editable;
 
+  /// Vrai pour un virement interne entre deux supports du compte — ce
+  /// n'est pas une nouvelle rentrée ou sortie d'argent, donc exclu de
+  /// [MonthForecast.totalIncome] / [MonthForecast.totalExpense].
+  final bool isTransfer;
+
   const ForecastItem({
     required this.label,
     required this.containerId,
@@ -33,6 +38,7 @@ class ForecastItem {
     this.recurringId,
     this.overrideMonthKey,
     this.editable = false,
+    this.isTransfer = false,
   });
 }
 
@@ -60,11 +66,11 @@ class MonthForecast {
   });
 
   double get totalIncome => items
-      .where((i) => i.signedAmount > 0)
+      .where((i) => !i.isTransfer && i.signedAmount > 0)
       .fold<double>(0, (s, i) => s + i.signedAmount);
 
   double get totalExpense => items
-      .where((i) => i.signedAmount < 0)
+      .where((i) => !i.isTransfer && i.signedAmount < 0)
       .fold<double>(0, (s, i) => s + i.signedAmount.abs());
 }
 
@@ -178,6 +184,7 @@ class ForecastService {
           containerId: r.containerId,
           signedAmount: -effectiveAmount,
           date: nextOcc,
+          isTransfer: true,
         ));
 
         if (isSplitTransfer) {
@@ -187,6 +194,7 @@ class ForecastService {
               containerId: leg.containerId,
               signedAmount: leg.amount,
               date: nextOcc,
+              isTransfer: true,
             ));
           }
         } else if (r.destinationContainerId != null) {
@@ -198,6 +206,7 @@ class ForecastService {
             recurringId: r.id,
             overrideMonthKey: occMonthKey,
             editable: true,
+            isTransfer: true,
           ));
         }
       } else {

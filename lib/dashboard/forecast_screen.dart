@@ -44,23 +44,32 @@ class ForecastScreen extends StatefulWidget {
 
 class _ForecastScreenState extends State<ForecastScreen> {
   final Map<String, TextEditingController> _controllers = {};
+  final Map<String, FocusNode> _focusNodes = {};
 
   @override
   void dispose() {
     for (final c in _controllers.values) {
       c.dispose();
     }
+    for (final f in _focusNodes.values) {
+      f.dispose();
+    }
     super.dispose();
   }
 
+  String _keyFor(ForecastItem item) => '${item.recurringId}_${item.overrideMonthKey}';
+
   TextEditingController _controllerFor(ForecastItem item) {
-    final key = '${item.recurringId}_${item.overrideMonthKey}';
     return _controllers.putIfAbsent(
-      key,
+      _keyFor(item),
       () => TextEditingController(
         text: item.signedAmount.abs().toStringAsFixed(2),
       ),
     );
+  }
+
+  FocusNode _focusNodeFor(ForecastItem item) {
+    return _focusNodes.putIfAbsent(_keyFor(item), () => FocusNode());
   }
 
   /// Couleur d'un solde selon son propre signe (rouge si négatif, vert si
@@ -239,6 +248,7 @@ class _ForecastScreenState extends State<ForecastScreen> {
                                 width: 130,
                                 child: TextField(
                                   controller: _controllerFor(item),
+                                  focusNode: _focusNodeFor(item),
                                   keyboardType:
                                       const TextInputType.numberWithOptions(
                                           decimal: true),
@@ -251,8 +261,21 @@ class _ForecastScreenState extends State<ForecastScreen> {
                                   ),
                                   decoration: InputDecoration(
                                     isDense: true,
-                                    prefixIcon:
-                                        const Icon(Icons.edit, size: 14),
+                                    prefixIcon: IconButton(
+                                      icon: const Icon(Icons.edit, size: 14),
+                                      padding: EdgeInsets.zero,
+                                      constraints: const BoxConstraints(),
+                                      onPressed: () {
+                                        final node = _focusNodeFor(item);
+                                        node.requestFocus();
+                                        _controllerFor(item).selection =
+                                            TextSelection(
+                                          baseOffset: 0,
+                                          extentOffset:
+                                              _controllerFor(item).text.length,
+                                        );
+                                      },
+                                    ),
                                     prefixText:
                                         item.signedAmount >= 0 ? '+' : '-',
                                     prefixStyle: TextStyle(
@@ -268,6 +291,13 @@ class _ForecastScreenState extends State<ForecastScreen> {
                                     item,
                                     _controllerFor(item).text,
                                   ),
+                                  onTapOutside: (_) {
+                                    _focusNodeFor(item).unfocus();
+                                    _saveOverride(
+                                      item,
+                                      _controllerFor(item).text,
+                                    );
+                                  },
                                 ),
                               )
                             else

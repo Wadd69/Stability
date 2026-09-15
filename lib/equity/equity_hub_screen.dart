@@ -52,14 +52,19 @@ class _EquityHubScreenState extends State<EquityHubScreen> {
     });
   }
 
-  Future<void> _editMyIncome(AccountMember me) async {
+  Future<void> _editIncome(AccountMember member) async {
+    final isMe = member.userId == AuthRepository.currentUser?.id;
     final controller = TextEditingController(
-      text: me.monthlyIncome > 0 ? me.monthlyIncome.toStringAsFixed(2) : '',
+      text: member.monthlyIncome > 0
+          ? member.monthlyIncome.toStringAsFixed(2)
+          : '',
     );
     final result = await showDialog<double>(
       context: context,
       builder: (_) => AlertDialog(
-        title: const Text('Mon revenu mensuel'),
+        title: Text(
+          isMe ? 'Mon revenu mensuel' : 'Revenu mensuel de ${member.displayName}',
+        ),
         content: TextField(
           controller: controller,
           autofocus: true,
@@ -83,7 +88,7 @@ class _EquityHubScreenState extends State<EquityHubScreen> {
     );
 
     if (result != null) {
-      await AccountMembersStore.setMyIncome(result);
+      await AccountMembersStore.setIncomeForUser(member.userId, result);
       if (mounted) setState(() {});
     }
   }
@@ -135,7 +140,6 @@ class _EquityHubScreenState extends State<EquityHubScreen> {
   }
 
   Widget _incomesSection(List<AccountMember> members) {
-    final myId = AuthRepository.currentUser?.id;
     return Card(
       margin: EdgeInsets.zero,
       child: Padding(
@@ -161,7 +165,7 @@ class _EquityHubScreenState extends State<EquityHubScreen> {
                   '${m.monthlyIncome.toStringAsFixed(0)} €/mois',
                   style: const TextStyle(fontWeight: FontWeight.w600),
                 ),
-                onTap: m.userId == myId ? () => _editMyIncome(m) : null,
+                onTap: () => _editIncome(m),
               ),
           ],
         ),

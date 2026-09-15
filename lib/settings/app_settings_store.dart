@@ -125,4 +125,15 @@ class AppSettingsStore {
   static void setHasSeenDashboardTutorial(bool value) {
     _box.put('hasSeenDashboardTutorial', value);
   }
+
+  /// Si vrai (défaut, comportement historique), le capital restant dû des
+  /// crédits en cours est déduit du total Patrimoine. Certains utilisateurs
+  /// préfèrent voir la valeur brute de leurs biens sans soustraire les
+  /// crédits associés — préférence locale à l'appareil.
+  static bool get deductCreditsFromNetWorth =>
+      _box.get('deductCreditsFromNetWorth') as bool? ?? true;
+
+  static void setDeductCreditsFromNetWorth(bool value) {
+    _box.put('deductCreditsFromNetWorth', value);
+  }
 }
