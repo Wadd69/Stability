@@ -206,7 +206,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
   }
 
-  Future<void> _devResetMontant() async {
+  Future<void> _resetMonthAmounts() async {
     final ok = await showDialog<bool>(
       context: context,
       builder: (_) => AlertDialog(
@@ -244,7 +244,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
   }
 
-  Future<void> _devResetTotal() async {
+  Future<void> _resetAllData() async {
     final ok = await showDialog<bool>(
       context: context,
       builder: (_) => AlertDialog(
@@ -480,17 +480,17 @@ class _SettingsScreenState extends State<SettingsScreen> {
           const Divider(),
           const SizedBox(height: 16),
           Text(
-            'Zone de développement',
+            'Réinitialisation',
             style: TextStyle(
               fontSize: 16,
               fontWeight: FontWeight.w600,
-              color: context.appColors.warning,
+              color: Theme.of(context).colorScheme.onSurface,
             ),
           ),
           const SizedBox(height: 4),
           Text(
-            'Réservé aux tests — ces actions suppriment des données de '
-            'façon définitive.',
+            'Ne concerne que votre compte — ces actions suppriment vos '
+            'données de façon définitive.',
             style: TextStyle(
               fontSize: 12,
               color: Theme.of(context).colorScheme.onSurfaceVariant,
@@ -498,11 +498,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           ),
           const SizedBox(height: 16),
           OutlinedButton.icon(
-            style: OutlinedButton.styleFrom(
-              foregroundColor: context.appColors.warning,
-              side: BorderSide(color: context.appColors.warning),
-            ),
-            onPressed: _devResetMontant,
+            onPressed: _resetMonthAmounts,
             icon: const Icon(Icons.restart_alt),
             label: const Text('Réinitialiser les montants du mois'),
           ),
@@ -512,9 +508,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
               foregroundColor: context.appColors.negative,
               side: BorderSide(color: context.appColors.negative),
             ),
-            onPressed: _devResetTotal,
+            onPressed: _resetAllData,
             icon: const Icon(Icons.warning_amber_rounded),
-            label: const Text('Tout réinitialiser'),
+            label: const Text('Réinitialiser toutes mes données'),
           ),
         ],
       ),
