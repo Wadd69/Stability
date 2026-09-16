@@ -13,7 +13,7 @@ import '../../theme/app_colors.dart';
 /// d'amortissement standard (mensualité fixe, taux constant) — capital
 /// restant dû / mensualité seul ignore les intérêts et sous-estime
 /// fortement la durée réelle (ex: crédit immobilier).
-int? _monthsLeft({
+int? monthsLeftForCredit({
   required double? remaining,
   required double? monthly,
   required double? annualRate,
@@ -77,8 +77,8 @@ class _ContainerCreditScreenState extends State<ContainerCreditScreen> {
     final original = _container.creditOriginalAmount;
     final rate = _container.creditAnnualRate;
 
-    final monthsLeft =
-        _monthsLeft(remaining: remaining, monthly: monthly, annualRate: rate);
+    final monthsLeft = monthsLeftForCredit(
+        remaining: remaining, monthly: monthly, annualRate: rate);
 
     final progress = (original != null && original > 0 && remaining != null)
         ? (1 - (remaining / original)).clamp(0.0, 1.0)

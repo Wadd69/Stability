@@ -180,7 +180,7 @@ class EquitySettlementService {
 
     return EquitySettlementResult(
       members: settlements,
-      transfers: _settleUp(settlements),
+      transfers: settleUp(settlements),
       totalUnassigned: unassigned,
     );
   }
@@ -188,7 +188,7 @@ class EquitySettlementService {
   /// Algorithme glouton "plus gros créancier ↔ plus gros débiteur" —
   /// minimise raisonnablement le nombre de virements suggérés sans viser
   /// l'optimalité stricte (largement suffisant pour un foyer).
-  static List<SuggestedTransfer> _settleUp(List<MemberSettlement> settlements) {
+  static List<SuggestedTransfer> settleUp(List<MemberSettlement> settlements) {
     final creditors = settlements
         .where((s) => s.balance > 0.01)
         .map((s) => MapEntry(s.member, s.balance))

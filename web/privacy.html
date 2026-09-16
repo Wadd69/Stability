@@ -1,0 +1,217 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Politique de confidentialité — Stability</title>
+<style>
+  :root {
+    color-scheme: light dark;
+    --bg: #f7f7f8;
+    --card: #ffffff;
+    --text: #1b1b1f;
+    --text-muted: #5b5d63;
+    --accent: #2f6fed;
+    --border: #e4e4e8;
+    padding-top: env(safe-area-inset-top, 0px);
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #121214;
+      --card: #1c1c1f;
+      --text: #f2f2f4;
+      --text-muted: #a3a4ab;
+      --accent: #6d9bff;
+      --border: #2c2c31;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #121214;
+    --card: #1c1c1f;
+    --text: #f2f2f4;
+    --text-muted: #a3a4ab;
+    --accent: #6d9bff;
+    --border: #2c2c31;
+  }
+
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font: 15px/1.6 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  }
+  img { max-width: 100%; }
+  [hidden] { display: none !important; }
+
+  .wrap {
+    max-width: 720px;
+    margin: 0 auto;
+    padding: 32px 16px 64px;
+  }
+  header {
+    margin-bottom: 32px;
+  }
+  header h1 {
+    font-size: 26px;
+    margin: 0 0 6px;
+  }
+  header p {
+    color: var(--text-muted);
+    margin: 0;
+    font-size: 13px;
+  }
+  .card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 20px 22px;
+    margin-bottom: 16px;
+  }
+  h2 {
+    font-size: 17px;
+    margin: 0 0 10px;
+  }
+  p, li { color: var(--text); }
+  ul { margin: 8px 0; padding-left: 20px; }
+  li { margin-bottom: 6px; }
+  a { color: var(--accent); }
+  .muted { color: var(--text-muted); font-size: 13px; }
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13.5px;
+    overflow-x: auto;
+    display: block;
+  }
+  table thead { display: table-header-group; }
+  table tbody { display: table-row-group; }
+  table tr { display: table-row; }
+  table th, table td {
+    display: table-cell;
+    text-align: left;
+    padding: 8px 10px;
+    border-bottom: 1px solid var(--border);
+    vertical-align: top;
+  }
+  table th { color: var(--text-muted); font-weight: 600; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>Politique de confidentialité — Stability</h1>
+    <p>Dernière mise à jour : 16 septembre 2026</p>
+  </header>
+
+  <div class="card">
+    <h2>En résumé</h2>
+    <p>
+      Stability est une application de gestion financière personnelle. Vos données financières
+      (transactions, budgets, comptes) vous appartiennent, ne sont jamais vendues ni utilisées à des
+      fins publicitaires, et ne sont partagées qu'avec les membres d'un compte commun que vous
+      choisissez vous-même de créer.
+    </p>
+  </div>
+
+  <div class="card">
+    <h2>Qui nous sommes</h2>
+    <p>
+      Stability est une application développée et exploitée à titre indépendant.
+      Pour toute question sur cette politique ou vos données, contactez :
+      <a href="mailto:Stability.app@proton.me">Stability.app@proton.me</a>.
+    </p>
+  </div>
+
+  <div class="card">
+    <h2>Données que nous collectons</h2>
+    <table>
+      <thead>
+        <tr><th>Donnée</th><th>Pourquoi</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>Email et mot de passe</td>
+          <td>Créer votre compte et vous authentifier. Le mot de passe est haché, jamais stocké en clair.</td>
+        </tr>
+        <tr>
+          <td>Nom d'utilisateur (optionnel)</td>
+          <td>Vous identifier auprès des autres membres d'un compte partagé.</td>
+        </tr>
+        <tr>
+          <td>Données financières que vous saisissez</td>
+          <td>Transactions, catégories, budgets, comptes/supports, crédits, objectifs d'épargne — le cœur du service, rien d'automatique ni de connecté à votre banque.</td>
+        </tr>
+        <tr>
+          <td>Revenu déclaré (comptes partagés)</td>
+          <td>Calculer une répartition équitable des dépenses entre membres — visible par les autres membres du même compte.</td>
+        </tr>
+        <tr>
+          <td>Clé API Finnhub (optionnelle)</td>
+          <td>Récupérer les cours d'actions/ETF que vous suivez — stockée uniquement sur votre appareil, jamais sur nos serveurs.</td>
+        </tr>
+        <tr>
+          <td>Rapports de plantage</td>
+          <td>Diagnostiquer les bugs (via Sentry) — inclut des informations techniques (modèle d'appareil, version du système, trace de l'erreur), jamais le contenu de vos données financières.</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="card">
+    <h2>Où sont stockées vos données</h2>
+    <p>
+      Vos données sont hébergées sur <strong>Supabase</strong> (infrastructure cloud), chiffrées en
+      transit (HTTPS/TLS). Des règles d'accès (Row Level Security) garantissent qu'un utilisateur ne
+      peut lire que les comptes dont il est membre.
+    </p>
+    <p>
+      Sur votre appareil, les préférences locales (thème, clé API Finnhub) sont chiffrées au repos,
+      avec une clé gérée par le stockage sécurisé du système d'exploitation. Les sauvegardes que vous
+      créez manuellement sont chiffrées avec la phrase de passe que vous choisissez — nous ne la
+      connaissons pas et ne pouvons pas la récupérer si vous l'oubliez.
+    </p>
+  </div>
+
+  <div class="card">
+    <h2>Partage avec des tiers</h2>
+    <ul>
+      <li><strong>Membres d'un compte partagé</strong> : voient les transactions, budgets et revenus déclarés de ce compte — jamais vos autres comptes.</li>
+      <li><strong>Finnhub / CoinGecko</strong> : si vous suivez des actions ou cryptomonnaies, le symbole (ex: "AAPL", "bitcoin") est envoyé à ces services pour récupérer un cours — aucune donnée personnelle ou financière n'est transmise.</li>
+      <li><strong>Sentry</strong> : reçoit des rapports techniques en cas de plantage, pour nous permettre de corriger les bugs.</li>
+    </ul>
+    <p>Nous ne vendons, ne louons et n'utilisons vos données à aucune fin publicitaire.</p>
+  </div>
+
+  <div class="card">
+    <h2>Vos droits</h2>
+    <ul>
+      <li><strong>Accès et export</strong> : la fonction "Créer une sauvegarde" dans les Réglages exporte l'intégralité de vos données financières.</li>
+      <li><strong>Suppression</strong> : "Supprimer mon compte" dans Compte &amp; sécurité supprime définitivement votre compte de connexion et vos données personnelles. Cette action est irréversible.</li>
+      <li><strong>Rectification</strong> : modifiez vos données directement dans l'app (nom, email, mot de passe, transactions...).</li>
+    </ul>
+    <p class="muted">
+      Vous pouvez aussi nous contacter à <a href="mailto:Stability.app@proton.me">Stability.app@proton.me</a>
+      pour toute demande relative à vos données.
+    </p>
+  </div>
+
+  <div class="card">
+    <h2>Conservation des données</h2>
+    <p>
+      Vos données sont conservées tant que votre compte existe. En cas de suppression de compte,
+      vos données personnelles sont supprimées définitivement de nos serveurs.
+    </p>
+  </div>
+
+  <div class="card">
+    <h2>Modifications de cette politique</h2>
+    <p>
+      Cette page peut être mise à jour ; la date en haut de page reflète la dernière modification.
+      Les changements significatifs vous seront signalés dans l'application.
+    </p>
+  </div>
+</div>
+</body>
+</html>
