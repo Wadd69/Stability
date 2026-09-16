@@ -121,6 +121,26 @@ La version PWA peut également être installée sur un téléphone afin d'être 
 
 Une version **APK Android** est également disponible pour installer Stability directement sur un appareil Android.
 
+👉 **[Télécharger la dernière version](https://github.com/Wadd69/Stability/releases/latest)**
+
+---
+
+## 🧪 Une app en bêta
+
+Stability est actuellement en phase de bêta : l'app est utilisable au quotidien, mais peut encore comporter des bugs.
+
+Un onglet **"Bêta & retours"** dans l'app permet de signaler un problème ou de proposer une idée directement.
+
+Pour toute autre question : **Stability.app@proton.me**
+
+---
+
+## 🔒 Confidentialité
+
+Stability ne revend ni n'exploite vos données à des fins publicitaires. Le détail de ce qui est collecté, comment c'est stocké et vos droits (export, suppression de compte) est disponible ici :
+
+👉 **[Politique de confidentialité](https://wadd69.github.io/Stability/privacy.html)**
+
 ---
 
 ## 💡 Une application pensée pour apprendre
@@ -161,6 +181,12 @@ Stability est un projet développé avec l'objectif de proposer une alternative 
 Le projet est disponible publiquement sur GitHub afin que chacun puisse découvrir son fonctionnement, consulter son code et contribuer à son amélioration.
 
 Les suggestions, retours et contributions sont les bienvenus.
+
+**Stack technique** : Flutter (Android, web/PWA) · Supabase (authentification, base de données, temps réel).
+
+### Licence
+
+Ce projet est distribué sous licence [PolyForm Noncommercial 1.0.0](LICENSE) : le code est ouvert à la consultation, l'utilisation et la modification à des fins **non commerciales**. Toute exploitation commerciale nécessite un accord préalable.
 
 ---
 
