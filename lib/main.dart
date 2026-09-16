@@ -1,8 +1,11 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import 'package:provider/provider.dart';
+import 'package:sentry_flutter/sentry_flutter.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import 'backend/sentry_config.dart';
 import 'backend/supabase_config.dart';
 import 'backend/auth_repository.dart';
 import 'backend/cloud_account.dart';
@@ -59,7 +62,20 @@ void main() async {
     AuthRepository.isPasswordRecovery.value = true;
   }
 
-  runApp(const StabilityApp());
+  await SentryFlutter.init(
+    (options) {
+      // Désactivé en debug local (kDebugMode) pour ne pas polluer Sentry
+      // avec des sessions de développement — actif en release (APK
+      // installé, PWA) où se produisent les vrais plantages.
+      options.dsn = kDebugMode ? null : SentryConfig.dsn;
+      options.environment = kDebugMode ? 'development' : 'production';
+      // Pas de suivi de performance (transactions) : uniquement les
+      // plantages/erreurs, pour rester confortablement dans le plan
+      // gratuit.
+      options.tracesSampleRate = 0.0;
+    },
+    appRunner: () => runApp(const StabilityApp()),
+  );
 }
 
 class StabilityApp extends StatelessWidget {
