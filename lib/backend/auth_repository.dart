@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
@@ -119,8 +121,24 @@ String friendlyAuthErrorMessage(Object error) {
         return 'Trop de tentatives. Réessayez dans quelques minutes.';
     }
 
-    if (error is AuthRetryableFetchException ||
-        error.message.contains('SocketException') ||
+    if (error is AuthRetryableFetchException) {
+      // statusCode présent = le serveur a répondu (avec une erreur 5xx),
+      // ce n'est donc pas un problème de connexion internet mais un vrai
+      // souci côté serveur (ex: configuration SMTP cassée empêchant
+      // l'envoi d'un email) — gotrue-dart classe toute erreur 5xx comme
+      // "retryable" sans distinguer les deux cas, voir fetch.dart.
+      if (error.statusCode != null) {
+        final detail = _extractServerErrorDetail(error.message);
+        return detail == null
+            ? 'Le serveur a rencontré un problème. Réessayez dans '
+                'quelques instants.'
+            : 'Le serveur a rencontré un problème : $detail';
+      }
+      return 'Impossible de contacter le serveur. Vérifiez votre '
+          'connexion internet.';
+    }
+
+    if (error.message.contains('SocketException') ||
         error.message.contains('Failed host lookup')) {
       return 'Impossible de contacter le serveur. Vérifiez votre '
           'connexion internet.';
@@ -130,4 +148,22 @@ String friendlyAuthErrorMessage(Object error) {
   }
 
   return 'Une erreur est survenue. Réessayez.';
+}
+
+/// Extrait le champ `msg` du corps JSON brut d'une erreur 5xx Supabase
+/// (ex: `{"code":500,"msg":"Error sending confirmation email"}`) — ce
+/// corps est disponible dans [AuthRetryableFetchException.message] mais
+/// jamais parsé par gotrue-dart pour ce type d'erreur. Retourne `null` si
+/// le corps n'est pas du JSON exploitable (mieux vaut alors un message
+/// générique qu'un fragment illisible).
+String? _extractServerErrorDetail(String rawBody) {
+  try {
+    final decoded = jsonDecode(rawBody);
+    if (decoded is Map && decoded['msg'] is String) {
+      return decoded['msg'] as String;
+    }
+  } catch (_) {
+    // Corps non-JSON (timeout, erreur de passerelle...) : pas de détail.
+  }
+  return null;
 }
