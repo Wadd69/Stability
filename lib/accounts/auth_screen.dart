@@ -110,7 +110,7 @@ class _AuthScreenState extends State<AuthScreen> {
     try {
       await AuthRepository.resetPasswordForEmail(
         email,
-        redirectTo: SupabaseConfig.passwordResetRedirectUrl,
+        redirectTo: SupabaseConfig.authRedirectUrl,
       );
       if (!mounted) return;
       setState(() {

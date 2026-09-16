@@ -1,6 +1,8 @@
 import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import 'supabase_config.dart';
+
 /// Encapsule l'authentification Supabase (email + mot de passe).
 class AuthRepository {
   static SupabaseClient get _client => Supabase.instance.client;
@@ -21,6 +23,12 @@ class AuthRepository {
   /// l'évènement, un `Stream` broadcast ne le rejouant pas.
   static final ValueNotifier<bool> isPasswordRecovery = ValueNotifier(false);
 
+  /// Vrai juste après avoir cliqué le lien de confirmation d'un nouveau
+  /// compte — contrairement à [isPasswordRecovery], il n'y a pas
+  /// d'`AuthChangeEvent` dédié pour ce cas (c'est un `signedIn` comme un
+  /// autre) : on se base directement sur `type=signup` dans l'URL (web).
+  static final ValueNotifier<bool> isEmailJustConfirmed = ValueNotifier(false);
+
   static void startListeningForPasswordRecovery() {
     onAuthStateChange.listen((state) {
       if (state.event == AuthChangeEvent.passwordRecovery) {
@@ -33,7 +41,11 @@ class AuthRepository {
     required String email,
     required String password,
   }) async {
-    await _client.auth.signUp(email: email, password: password);
+    await _client.auth.signUp(
+      email: email,
+      password: password,
+      emailRedirectTo: SupabaseConfig.authRedirectUrl,
+    );
   }
 
   static Future<void> signIn({

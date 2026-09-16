@@ -11,6 +11,7 @@ import 'backend/auth_repository.dart';
 import 'backend/cloud_account.dart';
 import 'backend/cloud_accounts_repository.dart';
 import 'accounts/auth_screen.dart';
+import 'accounts/email_confirmed_screen.dart';
 import 'accounts/reset_password_screen.dart';
 import 'onboarding/welcome_screen.dart';
 import 'onboarding/splash_screen.dart';
@@ -60,6 +61,12 @@ void main() async {
   // retrouve l'information directement dans l'URL du navigateur.
   if (Uri.base.toString().contains('type=recovery')) {
     AuthRepository.isPasswordRecovery.value = true;
+  }
+  // Lien de confirmation de compte cliqué : pas d'AuthChangeEvent dédié
+  // (c'est un signedIn comme un autre), on se base donc directement sur
+  // l'URL, comme pour la récupération de mot de passe ci-dessus.
+  if (Uri.base.toString().contains('type=signup')) {
+    AuthRepository.isEmailJustConfirmed.value = true;
   }
 
   await SentryFlutter.init(
@@ -182,29 +189,41 @@ class AppRoot extends StatefulWidget {
 class AppRootState extends State<AppRoot> {
   bool _loading = true;
   bool _isPasswordRecovery = false;
+  bool _isEmailJustConfirmed = false;
   List<CloudAccount> _accounts = [];
 
   @override
   void initState() {
     super.initState();
     _isPasswordRecovery = AuthRepository.isPasswordRecovery.value;
+    _isEmailJustConfirmed = AuthRepository.isEmailJustConfirmed.value;
     _load();
     AuthRepository.onAuthStateChange.listen((state) {
       if (state.event == AuthChangeEvent.passwordRecovery) return;
       _load();
     });
     AuthRepository.isPasswordRecovery.addListener(_onRecoveryChanged);
+    AuthRepository.isEmailJustConfirmed.addListener(_onEmailConfirmedChanged);
   }
 
   @override
   void dispose() {
     AuthRepository.isPasswordRecovery.removeListener(_onRecoveryChanged);
+    AuthRepository.isEmailJustConfirmed
+        .removeListener(_onEmailConfirmedChanged);
     super.dispose();
   }
 
   void _onRecoveryChanged() {
     if (mounted) {
       setState(() => _isPasswordRecovery = AuthRepository.isPasswordRecovery.value);
+    }
+  }
+
+  void _onEmailConfirmedChanged() {
+    if (mounted) {
+      setState(() =>
+          _isEmailJustConfirmed = AuthRepository.isEmailJustConfirmed.value);
     }
   }
 
@@ -258,6 +277,14 @@ class AppRootState extends State<AppRoot> {
       return ResetPasswordScreen(
         onDone: () {
           AuthRepository.isPasswordRecovery.value = false;
+          _load();
+        },
+      );
+    }
+    if (_isEmailJustConfirmed) {
+      return EmailConfirmedScreen(
+        onContinue: () {
+          AuthRepository.isEmailJustConfirmed.value = false;
           _load();
         },
       );
