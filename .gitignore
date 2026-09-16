@@ -43,3 +43,6 @@ app.*.map.json
 /android/app/debug
 /android/app/profile
 /android/app/release
+
+# Cache du compilateur Kotlin (régénéré à chaque build)
+/android/.kotlin/
